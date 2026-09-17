@@ -1,0 +1,12 @@
+name: bb-squeeze
+title: Bollinger squeeze
+description: >
+  Volatilitas menyempit ke 20% tersempit selama 6 bulan terakhir - kondisi
+  yang sering mendahului pergerakan besar, tanpa memberi tahu arahnya.
+filters:
+  - avg_value_20 > 2e9
+  - bb_squeeze
+  - atr_pct < 4
+sort: { by: bb_width, ascending: true }
+limit: 30
+columns: [ticker, name, close, bb_width, bb_pct_b, atr_pct, rsi14, ret_1m, avg_value_20]

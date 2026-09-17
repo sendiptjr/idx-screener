@@ -1,0 +1,14 @@
+name: dividend
+title: Dividen - imbal hasil tinggi
+description: >
+  Yield dividen tinggi dengan payout ratio yang masih wajar (<85%) supaya
+  pembagiannya berpeluang berlanjut, ditambah syarat profitabilitas.
+filters:
+  - avg_value_20 > 1e9
+  - dividend_yield > 4
+  - payout_ratio > 0 and payout_ratio < 85
+  - roe > 8
+  - per > 0
+sort: { by: dividend_yield, ascending: false }
+limit: 30
+columns: [ticker, name, sector, close, dividend_yield, payout_ratio, per, pbv, roe]

@@ -1,0 +1,14 @@
+name: pullback
+title: Pullback - koreksi di dalam tren naik
+description: >
+  Tren jangka panjang masih naik (harga di atas SMA200) tetapi jangka pendek
+  tertekan: RSI rendah dan harga menempel batas bawah Bollinger.
+filters:
+  - avg_value_20 > 2e9
+  - above_sma200
+  - rsi14 < 40
+  - bb_pct_b < 0.25
+  - ret_1y > 0
+sort: { by: rsi14, ascending: true }
+limit: 30
+columns: [ticker, name, close, change_pct, rsi14, bb_pct_b, dist_sma200, ret_1m, ret_1y]

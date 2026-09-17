@@ -1,0 +1,18 @@
+[project]
+name = "idx-screener"
+version = "0.1.0"
+description = "Screener saham Bursa Efek Indonesia (IDX) berbasis data harga dan fundamental"
+requires-python = ">=3.10"
+
+[project.scripts]
+idxscreen = "idx_screener.cli:app"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["idx_screener*"]
+
+[tool.setuptools.package-data]
+"idx_screener" = ["presets/*.yaml"]

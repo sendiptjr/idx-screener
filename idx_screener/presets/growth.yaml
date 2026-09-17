@@ -1,0 +1,14 @@
+name: growth
+title: Growth - pertumbuhan laba
+description: >
+  Pendapatan dan laba tumbuh dua digit dengan margin yang masih positif.
+  PEG dipakai agar harga pertumbuhannya tidak terlalu mahal.
+filters:
+  - avg_value_20 > 2e9
+  - revenue_growth > 10
+  - earnings_growth > 15
+  - npm > 5
+  - roe > 12
+sort: { by: earnings_growth, ascending: false }
+limit: 30
+columns: [ticker, name, sector, close, per, peg, roe, revenue_growth, earnings_growth, npm]

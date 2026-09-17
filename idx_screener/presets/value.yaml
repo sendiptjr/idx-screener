@@ -1,0 +1,15 @@
+name: value
+title: Value - murah tapi sehat
+description: >
+  Emiten dengan valuasi rendah (PER dan PBV kecil) yang tetap menghasilkan
+  laba dan tidak menumpuk utang. Saring lagi manual: PER kecil sering berasal
+  dari laba non-operasional satu kali.
+filters:
+  - avg_value_20 > 2e9
+  - per > 0 and per < 12
+  - pbv > 0 and pbv < 1.8
+  - roe > 10
+  - der < 1.5
+sort: { by: per, ascending: true }
+limit: 30
+columns: [ticker, name, sector, close, per, pbv, roe, der, dividend_yield, avg_value_20]

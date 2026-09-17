@@ -1,0 +1,19 @@
+name: syariah-proxy
+title: Perkiraan saringan syariah
+description: >
+  PERKIRAAN, bukan Daftar Efek Syariah resmi OJK. Pendekatannya meniru batas
+  rasio utang berbasis bunga dan menyingkirkan usaha yang umumnya tidak lolos
+  (bank dan multifinance konvensional, rokok, minuman beralkohol).
+note: >
+  Selalu cek Daftar Efek Syariah (DES) terbaru di ojk.go.id atau idx.co.id
+  sebelum mengambil keputusan.
+filters:
+  - avg_value_20 > 1e9
+  - der < 0.45
+  - not (sector in ["Keuangan", "Financial Services"])
+  - not ("bank" in lower(industry) or "credit" in lower(industry))
+  - not ("tobacco" in lower(industry) or "brewer" in lower(industry))
+  - per > 0
+sort: { by: roe, ascending: false }
+limit: 40
+columns: [ticker, name, sector, industry, close, der, per, pbv, roe, dividend_yield]

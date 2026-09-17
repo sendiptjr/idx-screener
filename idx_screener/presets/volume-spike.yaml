@@ -1,0 +1,13 @@
+name: volume-spike
+title: Lonjakan volume
+description: >
+  Volume hari terakhir jauh di atas rata-rata 20 hari dengan harga menguat,
+  sering jadi jejak awal akumulasi. Perlu dicek ulang lewat berita/aksi korporasi.
+filters:
+  - avg_value_20 > 1e9
+  - volume_ratio > 3
+  - change_pct > 1
+  - mfi14 > 50
+sort: { by: volume_ratio, ascending: false }
+limit: 30
+columns: [ticker, name, close, change_pct, volume_ratio, mfi14, value_traded, ret_1w, ret_1m]

@@ -1,0 +1,14 @@
+name: momentum
+title: Momentum - tren naik
+description: >
+  Harga berada di atas SMA20/50/200 dengan return 3 bulan positif dan RSI
+  belum jenuh beli ekstrem.
+filters:
+  - avg_value_20 > 3e9
+  - above_sma20 and above_sma50 and above_sma200
+  - sma50 > sma200
+  - ret_3m > 10
+  - rsi14 between 50 and 78
+sort: { by: ret_3m, ascending: false }
+limit: 30
+columns: [ticker, name, sector, close, change_pct, ret_1m, ret_3m, ret_6m, rsi14, dist_52w_high]

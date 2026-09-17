@@ -1,0 +1,20 @@
+name: lonjakan
+title: Lonjakan yang masih bisa dibeli
+description: >
+  Saham likuid yang melonjak hari ini tetapi TIDAK terkunci ARA, sehingga masih
+  bisa dibeli di harga penutupan. Diukur pada 2 tahun data, kelompok ini unggul
+  sekitar 1,3-1,8% di atas pasar setelah ongkos bila ditahan 1-2 minggu - tapi
+  merugi bila dijual besoknya.
+note: >
+  Bukan untuk ditahan semalam: pada horizon 1 hari kelompok ini tertinggal
+  0,87% dari pasar setelah ongkos. Median 1-2 minggu pun masih negatif
+  (-0,8%), jadi keunggulannya datang dari sedikit pemenang besar - butuh
+  banyak posisi, bukan satu dua.
+filters:
+  - avg_value_20 > 1e10
+  - change_pct > 7
+  - not at_ara
+  - close > sma20
+sort: { by: change_pct, ascending: false }
+limit: 20
+columns: [ticker, name, sector, close, change_pct, dist_ara, volume_ratio, ret_1m, ret_3m, avg_value_20]

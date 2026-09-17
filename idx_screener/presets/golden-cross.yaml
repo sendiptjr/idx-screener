@@ -1,0 +1,10 @@
+name: golden-cross
+title: Golden cross baru
+description: SMA50 memotong ke atas SMA200 dalam 10 hari bursa terakhir.
+filters:
+  - avg_value_20 > 1e9
+  - golden_cross
+  - close > sma50
+sort: { by: avg_value_20, ascending: false }
+limit: 30
+columns: [ticker, name, sector, close, sma50, sma200, ret_1m, ret_3m, volume_ratio, avg_value_20]

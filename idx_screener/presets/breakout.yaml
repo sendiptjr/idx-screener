@@ -1,0 +1,14 @@
+name: breakout
+title: Breakout - dekat puncak 52 minggu
+description: >
+  Harga kurang dari 5% di bawah tertinggi 52 minggu, disertai volume di atas
+  rata-rata sebagai konfirmasi.
+filters:
+  - avg_value_20 > 3e9
+  - dist_52w_high > -5
+  - volume_ratio > 1.5
+  - close > sma20
+  - ret_1m > 0
+sort: { by: dist_52w_high, ascending: false }
+limit: 30
+columns: [ticker, name, close, change_pct, dist_52w_high, volume_ratio, ret_1m, ret_3m, atr_pct]

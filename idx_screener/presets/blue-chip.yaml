@@ -1,0 +1,12 @@
+name: blue-chip
+title: Blue chip likuid
+description: >
+  Kapitalisasi pasar di atas Rp 50 triliun dengan nilai transaksi harian besar.
+  Titik awal yang wajar untuk portofolio inti.
+filters:
+  - market_cap > 5e13
+  - avg_value_20 > 2e10
+  - roe > 10
+sort: { by: market_cap, ascending: false }
+limit: 40
+columns: [ticker, name, sector, close, market_cap, per, pbv, roe, dividend_yield, ret_1y]

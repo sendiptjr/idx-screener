@@ -1,0 +1,175 @@
+ticker,name,sector
+BBCA,Bank Central Asia,Keuangan
+BBRI,Bank Rakyat Indonesia,Keuangan
+BMRI,Bank Mandiri,Keuangan
+BBNI,Bank Negara Indonesia,Keuangan
+BRIS,Bank Syariah Indonesia,Keuangan
+BBTN,Bank Tabungan Negara,Keuangan
+BNGA,Bank CIMB Niaga,Keuangan
+BDMN,Bank Danamon,Keuangan
+PNBN,Bank Pan Indonesia,Keuangan
+NISP,Bank OCBC NISP,Keuangan
+MEGA,Bank Mega,Keuangan
+BTPS,BTPN Syariah,Keuangan
+ARTO,Bank Jago,Keuangan
+BBHI,Allo Bank Indonesia,Keuangan
+BANK,Bank Aladin Syariah,Keuangan
+BJBR,Bank Jabar Banten,Keuangan
+BJTM,Bank Jatim,Keuangan
+BBYB,Bank Neo Commerce,Keuangan
+AGRO,Bank Raya Indonesia,Keuangan
+BNII,Bank Maybank Indonesia,Keuangan
+BFIN,BFI Finance Indonesia,Keuangan
+ADMF,Adira Dinamika Multi Finance,Keuangan
+CFIN,Clipan Finance Indonesia,Keuangan
+PNLF,Panin Financial,Keuangan
+PNIN,Paninvest,Keuangan
+SRTG,Saratoga Investama Sedaya,Keuangan
+BPFI,Batavia Prosperindo Finance,Keuangan
+TLKM,Telkom Indonesia,Infrastruktur
+EXCL,XL Axiata,Infrastruktur
+ISAT,Indosat Ooredoo Hutchison,Infrastruktur
+TOWR,Sarana Menara Nusantara,Infrastruktur
+TBIG,Tower Bersama Infrastructure,Infrastruktur
+MTEL,Dayamitra Telekomunikasi,Infrastruktur
+JSMR,Jasa Marga,Infrastruktur
+PGAS,Perusahaan Gas Negara,Energi
+PGEO,Pertamina Geothermal Energy,Energi
+POWR,Cikarang Listrindo,Infrastruktur
+GOTO,GoTo Gojek Tokopedia,Teknologi
+BUKA,Bukalapak,Teknologi
+EMTK,Elang Mahkota Teknologi,Teknologi
+DMMX,Digital Mediatama Maxima,Teknologi
+WIFI,Solusi Sinergi Digital,Teknologi
+MLPT,Multipolar Technology,Teknologi
+MCAS,M Cash Integrasi,Teknologi
+MNCN,Media Nusantara Citra,Konsumen Non-Primer
+SCMA,Surya Citra Media,Konsumen Non-Primer
+ASII,Astra International,Konsumen Non-Primer
+UNTR,United Tractors,Perindustrian
+HEXA,Hexindo Adiperkasa,Perindustrian
+AUTO,Astra Otoparts,Konsumen Non-Primer
+GJTL,Gajah Tunggal,Konsumen Non-Primer
+IMAS,Indomobil Sukses Internasional,Konsumen Non-Primer
+SMSM,Selamat Sempurna,Konsumen Non-Primer
+DRMA,Dharma Polimetal,Konsumen Non-Primer
+UNVR,Unilever Indonesia,Konsumen Primer
+ICBP,Indofood CBP Sukses Makmur,Konsumen Primer
+INDF,Indofood Sukses Makmur,Konsumen Primer
+MYOR,Mayora Indah,Konsumen Primer
+KLBF,Kalbe Farma,Kesehatan
+SIDO,Industri Jamu Sido Muncul,Kesehatan
+HMSP,HM Sampoerna,Konsumen Primer
+GGRM,Gudang Garam,Konsumen Primer
+WIIM,Wismilak Inti Makmur,Konsumen Primer
+CPIN,Charoen Pokphand Indonesia,Konsumen Primer
+JPFA,Japfa Comfeed Indonesia,Konsumen Primer
+MAIN,Malindo Feedmill,Konsumen Primer
+ROTI,Nippon Indosari Corpindo,Konsumen Primer
+ULTJ,Ultrajaya Milk Industry,Konsumen Primer
+CLEO,Sariguna Primatirta,Konsumen Primer
+GOOD,Garudafood Putra Putri Jaya,Konsumen Primer
+KEJU,Mulia Boga Raya,Konsumen Primer
+CMRY,Cisarua Mountain Dairy,Konsumen Primer
+AMRT,Sumber Alfaria Trijaya,Konsumen Primer
+MIDI,Midi Utama Indonesia,Konsumen Primer
+MAPI,Mitra Adiperkasa,Konsumen Non-Primer
+MAPA,Map Aktif Adiperkasa,Konsumen Non-Primer
+ACES,Aspirasi Hidup Indonesia,Konsumen Non-Primer
+LPPF,Matahari Department Store,Konsumen Non-Primer
+ERAA,Erajaya Swasembada,Konsumen Non-Primer
+RALS,Ramayana Lestari Sentosa,Konsumen Non-Primer
+PZZA,Sarimelati Kencana,Konsumen Non-Primer
+FAST,Fast Food Indonesia,Konsumen Non-Primer
+MIKA,Mitra Keluarga Karyasehat,Kesehatan
+SILO,Siloam International Hospitals,Kesehatan
+HEAL,Medikaloka Hermina,Kesehatan
+PRDA,Prodia Widyahusada,Kesehatan
+KAEF,Kimia Farma,Kesehatan
+INAF,Indofarma,Kesehatan
+PEHA,Phapros,Kesehatan
+SRAJ,Sejahteraraya Anugrahjaya,Kesehatan
+ADRO,Alamtri Resources Indonesia,Energi
+PTBA,Bukit Asam,Energi
+ITMG,Indo Tambangraya Megah,Energi
+HRUM,Harum Energy,Energi
+INDY,Indika Energy,Energi
+BYAN,Bayan Resources,Energi
+BUMI,Bumi Resources,Energi
+DOID,Delta Dunia Makmur,Energi
+DEWA,Darma Henwa,Energi
+ADMR,Adaro Minerals Indonesia,Energi
+TOBA,TBS Energi Utama,Energi
+GEMS,Golden Energy Mines,Energi
+MBAP,Mitrabara Adiperdana,Energi
+PTRO,Petrosea,Energi
+RAJA,Rukun Raharja,Energi
+MEDC,Medco Energi Internasional,Energi
+ELSA,Elnusa,Energi
+AKRA,AKR Corporindo,Energi
+DSSA,Dian Swastatika Sentosa,Energi
+CUAN,Petrindo Jaya Kreasi,Energi
+BREN,Barito Renewables Energy,Infrastruktur
+ANTM,Aneka Tambang,Barang Baku
+INCO,Vale Indonesia,Barang Baku
+MDKA,Merdeka Copper Gold,Barang Baku
+TINS,Timah,Barang Baku
+PSAB,J Resources Asia Pasifik,Barang Baku
+BRMS,Bumi Resources Minerals,Barang Baku
+NCKL,Trimegah Bangun Persada,Barang Baku
+MBMA,Merdeka Battery Materials,Barang Baku
+AMMN,Amman Mineral Internasional,Barang Baku
+HRTA,Hartadinata Abadi,Barang Baku
+SMGR,Semen Indonesia,Barang Baku
+INTP,Indocement Tunggal Prakarsa,Barang Baku
+SMBR,Semen Baturaja,Barang Baku
+SMCB,Solusi Bangun Indonesia,Barang Baku
+BRPT,Barito Pacific,Barang Baku
+TPIA,Chandra Asri Pacific,Barang Baku
+ESSA,Essa Industries Indonesia,Barang Baku
+AVIA,Avia Avian,Barang Baku
+MARK,Mark Dynamics Indonesia,Barang Baku
+INKP,Indah Kiat Pulp & Paper,Barang Baku
+TKIM,Pabrik Kertas Tjiwi Kimia,Barang Baku
+FASW,Fajar Surya Wisesa,Barang Baku
+ISSP,Steel Pipe Industry of Indonesia,Barang Baku
+KRAS,Krakatau Steel,Barang Baku
+ARNA,Arwana Citramulia,Barang Baku
+TOTO,Surya Toto Indonesia,Perindustrian
+KDSI,Kedawung Setia Industrial,Perindustrian
+BSDE,Bumi Serpong Damai,Properti
+CTRA,Ciputra Development,Properti
+SMRA,Summarecon Agung,Properti
+PWON,Pakuwon Jati,Properti
+ASRI,Alam Sutera Realty,Properti
+DMAS,Puradelta Lestari,Properti
+LPKR,Lippo Karawaci,Properti
+APLN,Agung Podomoro Land,Properti
+PANI,Pantai Indah Kapuk Dua,Properti
+KIJA,Kawasan Industri Jababeka,Properti
+DILD,Intiland Development,Properti
+SSIA,Surya Semesta Internusa,Properti
+WIKA,Wijaya Karya,Infrastruktur
+PTPP,PP Persero,Infrastruktur
+ADHI,Adhi Karya,Infrastruktur
+TOTL,Total Bangun Persada,Infrastruktur
+NRCA,Nusa Raya Cipta,Infrastruktur
+AALI,Astra Agro Lestari,Konsumen Primer
+LSIP,PP London Sumatra Indonesia,Konsumen Primer
+SIMP,Salim Ivomas Pratama,Konsumen Primer
+SGRO,Sampoerna Agro,Konsumen Primer
+DSNG,Dharma Satya Nusantara,Konsumen Primer
+TBLA,Tunas Baru Lampung,Konsumen Primer
+SSMS,Sawit Sumbermas Sarana,Konsumen Primer
+ANJT,Austindo Nusantara Jaya,Konsumen Primer
+BWPT,Eagle High Plantations,Konsumen Primer
+SMDR,Samudera Indonesia,Transportasi & Logistik
+TMAS,Temas,Transportasi & Logistik
+ASSA,Adi Sarana Armada,Transportasi & Logistik
+BIRD,Blue Bird,Transportasi & Logistik
+GIAA,Garuda Indonesia,Transportasi & Logistik
+IPCC,Indonesia Kendaraan Terminal,Transportasi & Logistik
+IPCM,Jasa Armada Indonesia,Transportasi & Logistik
+HITS,Humpuss Intermoda Transportasi,Transportasi & Logistik
+SHIP,Sillo Maritime Perdana,Transportasi & Logistik
+NELY,Pelayaran Nelly Dwi Putri,Transportasi & Logistik
