@@ -239,21 +239,15 @@ characters or more than 4 consecutive spaces`. Karena itu baris barunya harus
 berada di badan template, satu placeholder per baris. Parameter berisi **satu
 spasi** diterima, jadi baris yang tidak terpakai di hari sepi dibiarkan kosong.
 
-### Template yang harus dibuat
+### Template yang dipakai
 
-Di WhatsApp Manager → Manage templates → Create template:
-
-- **Name**: `idx_lonjakan_harian`
-- **Category**: Utility (bukan Marketing - lebih murah dan lebih jarang ditolak)
-- **Language**: Indonesian (`id`)
-- **Placeholder**: pilih **positional** (`{{1}}`), bukan named (`{{tanggal}}`)
-
-Badan template, salin persis:
+Namanya `idx_lonjakan`, kategori **Utility**, bahasa **Indonesian** (`id`),
+placeholder **positional** (`{{1}}`, bukan `{{tanggal}}`). Badan template:
 
 ```
 *Lonjakan yang masih bisa dibeli*
-Penutupan {{1}}
-{{2}} dari {{3}} emiten lolos
+Data {{1}}
+{{2}} dari {{3}} emiten lolos hari ini.
 
 1. {{4}}
 2. {{5}}
@@ -263,9 +257,15 @@ Penutupan {{1}}
 6. {{9}}
 7. {{10}}
 8. {{11}}
-
 {{12}}
-Sumber: Yahoo Finance, harga penutupan.
+
+Daftar ini disaring dari saham likuid yang melonjak lebih dari tujuh persen
+hari itu, belum terkunci ARA sehingga masih bisa dibeli, dan harganya masih
+berada di atas rata-rata dua puluh hari. Diukur pada dua tahun data, kelompok
+ini unggul sekitar satu sampai dua persen di atas pasar bila ditahan satu
+sampai dua minggu, tetapi merugi bila dijual keesokan harinya. Keunggulannya
+datang dari sedikit pemenang besar, jadi sebarkan ke banyak posisi, jangan
+bertaruh pada satu atau dua saham saja.
 ```
 
 Footer (kolom terpisah, teks tetap):
@@ -274,16 +274,29 @@ Footer (kolom terpisah, teks tetap):
 Bukan rekomendasi beli. Horizon 1-2 minggu.
 ```
 
-Nomor urut sengaja ditulis sebagai teks tetap di template, bukan ikut di dalam
-parameter: badan yang isinya hampir seluruhnya placeholder sering ditolak saat
-review. Konsekuensinya, di hari yang cuma meloloskan dua saham, nomor 3-8 tetap
-muncul tanpa isi.
+Tiga keputusan bentuk di atas semuanya dipaksa oleh aturan Meta, bukan selera:
+
+**Paragraf penjelasan itu wajib ada.** Versi pertama template ini - hanya
+daftar saham tanpa paragraf - ditolak seketika dengan `2388293: Parameters
+words ratio exceeds limit`, "too many variables for its length". Meta menuntut
+teks tetap yang cukup banyak dibanding jumlah variabel. Versi sekarang: 600
+huruf teks tetap untuk 12 variabel, sekitar 50 huruf per variabel, dan lolos.
+
+**Nomor urut ditulis sebagai teks tetap**, bukan ikut di dalam parameter -
+alasan yang sama. Konsekuensinya, di hari yang cuma meloloskan dua saham,
+nomor 3-8 tetap muncul tanpa isi.
+
+**`{{1}}` memuat konteks, bukan sekadar tanggal.** Badan template tidak bisa
+berbeda antara jadwal pagi dan sore, jadi kata "penutupan" tidak boleh
+ditulis tetap di situ - pukul 15:00 datanya bukan penutupan. Kode mengisi
+`{{1}}` dengan `penutupan Kamis, 17 Sep 2026` atau `sesi berjalan Jumat,
+18 Sep 2026 pukul 15.02 WIB`, tergantung `stale_days`.
 
 Contoh nilai yang diminta Meta sebelum tombol Submit menyala:
 
 | | |
 |---|---|
-| `{{1}}` | `Kamis, 17 Sep 2026` |
+| `{{1}}` | `penutupan Kamis, 17 Sep 2026` |
 | `{{2}}` | `11` |
 | `{{3}}` | `845` |
 | `{{4}}` | `TEBE +18,73% · Rp 1.965 · sisa ARA 6,27%` |
@@ -294,6 +307,12 @@ Jumlah baris saham dipatok 8 (`SLOT_SAHAM` di
 [notify.py](idx_screener/notify.py)). Mengubahnya berarti mengubah badan
 template di Meta juga - keduanya harus cocok.
 
+Satu jebakan kalau Anda perlu mengganti badan template kelak: **jangan hapus
+lalu buat ulang dengan nama sama.** Meta memblokir pemakaian ulang nama yang
+baru dihapus, dan pembuatan ulang akan ditolak berulang kali dengan
+`2388023: Message template language is being deleted`. Template berstatus
+APPROVED bisa disunting langsung; kalau masih PENDING, buat saja nama baru.
+
 ### Kredensial
 
 Empat variabel lingkungan; ambil dari Meta for Developers → aplikasi Anda →
@@ -303,7 +322,7 @@ WhatsApp → API Setup.
 export WA_TOKEN=EAAG...            # token permanen milik System User, bukan token 24 jam
 export WA_PHONE_NUMBER_ID=1234567  # Phone number ID, bukan nomor teleponnya
 export WA_TO=6281234567890         # nomor tujuan, wajib terdaftar dulu saat masih mode test
-export WA_TEMPLATE=idx_lonjakan_harian
+export WA_TEMPLATE=idx_lonjakan
 # opsional: WA_TEMPLATE_LANG (bawaan id), WA_API_VERSION (bawaan v25.0)
 ```
 
