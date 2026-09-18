@@ -13,6 +13,14 @@ from .backtest import LookAheadError, backtest as run_backtest
 from .cache import Cache
 from .config import HISTORY_PERIOD, UNIVERSE_CSV
 from .metrics import FIELD_DOCS
+from .notify import (
+    NotifyError,
+    WhatsAppConfig,
+    format_template_params,
+    format_text,
+    send,
+    tanggal_id,
+)
 from .presets import load_presets
 from .providers.yahoo import YahooProvider, bulk_sectors, list_equities
 from .report import console, export, fmt, render_funnel, render_table
@@ -142,6 +150,95 @@ def screen(
     if export_to and not result.matched.empty:
         path = export(result.matched, export_to, result.columns or None)
         console.print(f"[green]Tersimpan:[/green] {path}")
+
+
+@app.command()
+def notify(
+    preset: str = typer.Option("lonjakan", "--preset", "-p", help="Preset yang dikirim."),
+    to: Optional[str] = typer.Option(None, "--to", help="Nomor WhatsApp tujuan (default: env WA_TO)."),
+    top: int = typer.Option(8, "--top", help="Berapa saham teratas di pesan teks; template selalu 8 baris."),
+    mode: str = typer.Option("auto", "--mode", help="auto | text | template."),
+    template: Optional[str] = typer.Option(None, "--template", help="Nama template Meta (default: env WA_TEMPLATE)."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Cetak pesannya saja, jangan kirim."),
+    max_stale_days: int = typer.Option(5, "--max-stale-days", help="Batalkan bila data bursa lebih tua dari ini (0 = abaikan)."),
+    skip_empty: bool = typer.Option(False, "--skip-empty", help="Jangan kirim apa pun bila tidak ada yang lolos."),
+    tickers: Optional[str] = typer.Option(None, "--tickers", "-t"),
+    universe_file: Optional[str] = typer.Option(None, "--universe", "-u"),
+    max_deep: int = typer.Option(400, "--max-deep"),
+    offline: bool = typer.Option(False, "--offline", help="Hanya pakai cache, tanpa jaringan."),
+    refresh: bool = typer.Option(False, "--refresh", help="Paksa ambil ulang dari Yahoo."),
+):
+    """Jalankan preset lalu kirim hasilnya ke WhatsApp (Meta Cloud API)."""
+    presets = load_presets()
+    if preset not in presets:
+        console.print(f"[red]Preset '{preset}' tidak ada.[/red] Tersedia: {', '.join(sorted(presets))}")
+        raise typer.Exit(2)
+    chosen = presets[preset]
+
+    screener = _build_screener(tickers, universe_file, offline, refresh)
+    console.print(f"[dim]Memindai {len(screener.universe)} emiten untuk preset '{preset}'...[/dim]")
+    try:
+        result = screener.run(preset=chosen, max_deep=max_deep, progress=_progress_printer())
+    except (RuleError, KeyError) as exc:
+        console.print(f"[red]Filter bermasalah:[/red] {exc}")
+        raise typer.Exit(2) from exc
+
+    if result.snapshot.empty:
+        console.print("[red]Tidak ada data harga sama sekali.[/red] Cek jaringan atau isi cache.")
+        raise typer.Exit(1)
+
+    # Hari bursa terakhir = tanggal terbaru di seluruh snapshot, bukan per baris.
+    stale = int(result.snapshot["stale_days"].min())
+    tanggal = str(result.snapshot.loc[result.snapshot["stale_days"].idxmin(), "last_date"])
+    if max_stale_days and stale > max_stale_days:
+        console.print(f"[yellow]Dibatalkan:[/yellow] data terakhir {tanggal_id(tanggal)} "
+                      f"({stale} hari lalu) melewati --max-stale-days {max_stale_days}.")
+        raise typer.Exit(0)
+
+    if result.matched.empty and skip_empty:
+        console.print("[yellow]Tidak ada yang lolos; pesan tidak dikirim (--skip-empty).[/yellow]")
+        raise typer.Exit(0)
+
+    teks = format_text(
+        result.matched,
+        judul=chosen.title,
+        tanggal=tanggal,
+        stale_days=stale,
+        total_scanned=result.total_scanned,
+        top=top,
+        catatan=(chosen.note or "").strip().replace("\n", " "),
+    )
+    params = format_template_params(
+        result.matched,
+        tanggal=tanggal,
+        stale_days=stale,
+        total_scanned=result.total_scanned,
+    )
+
+    if dry_run:
+        console.print(Panel(teks, title="pesan teks (jendela 24 jam)", border_style="cyan"))
+        console.print(Panel(
+            "\n".join(f"{{{{{i}}}}} = {p}" for i, p in enumerate(params, start=1)),
+            title="parameter template", border_style="cyan",
+        ))
+        console.print("[dim]--dry-run: tidak ada yang dikirim.[/dim]")
+        raise typer.Exit(0)
+
+    try:
+        config = WhatsAppConfig.from_env(to)
+        if template:
+            config.template = template
+        jalur, response = send(config, text=teks, params=params, mode=mode)
+    except NotifyError as exc:
+        console.print(f"[red]Gagal mengirim:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    except Exception as exc:  # jaringan putus, DNS, timeout
+        console.print(f"[red]Gagal menghubungi Meta:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    pesan_id = (response.get("messages") or [{}])[0].get("id", "-")
+    console.print(f"[green]Terkirim[/green] ke {config.to} lewat {jalur} "
+                  f"({len(result.matched)} saham, data {tanggal_id(tanggal)}). id={pesan_id}")
 
 
 @app.command()

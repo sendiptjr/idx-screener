@@ -1,6 +1,6 @@
 VENV := .venv/bin
 
-.PHONY: setup test update universe screen app clean
+.PHONY: setup test update universe screen app notify clean
 
 setup:            ## Pasang virtualenv dan dependensi
 	python3 -m venv .venv
@@ -22,6 +22,9 @@ screen:           ## Contoh screening
 
 app:              ## Jalankan antarmuka web
 	$(VENV)/streamlit run app.py
+
+notify:           ## Uji pesan WhatsApp harian tanpa mengirim
+	$(VENV)/idxscreen notify --preset lonjakan --dry-run
 
 clean:            ## Hapus cache dan berkas sementara
 	rm -rf .cache out .pytest_cache

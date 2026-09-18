@@ -1,0 +1,57 @@
+# Kirim preset "Lonjakan yang masih bisa dibeli" ke WhatsApp dua kali sehari.
+#
+# WIB = UTC+7 dan tidak pernah berganti tanggal pada jam-jam ini, jadi hari
+# cron-nya sama persis dengan hari WIB: 1-5 = Senin-Jumat.
+#
+# Cron GitHub sering telat 5-15 menit saat antrean padat; kalau ketepatan
+# waktu penting - dan untuk kiriman 15:00 itu lebih terasa karena bursa tutup
+# sekitar 15.50 - pindahkan ke cron di VPS sendiri.
+name: WA lonjakan harian
+
+on:
+  schedule:
+    - cron: "30 1 * * 1-5"   # 08:30 WIB - sebelum bursa buka, data penutupan kemarin
+    - cron: "0 8 * * 1-5"    # 15:00 WIB - sesi II masih berjalan, angka belum final
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Hanya cetak pesannya, jangan kirim"
+        type: boolean
+        default: true
+
+concurrency:
+  group: wa-lonjakan
+  cancel-in-progress: false
+
+jobs:
+  kirim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Pasang dependensi
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . -r requirements.txt
+
+      - name: Screening dan kirim
+        env:
+          WA_TOKEN: ${{ secrets.WA_TOKEN }}
+          WA_PHONE_NUMBER_ID: ${{ secrets.WA_PHONE_NUMBER_ID }}
+          WA_TO: ${{ secrets.WA_TO }}
+          WA_TEMPLATE: ${{ secrets.WA_TEMPLATE }}
+          WA_TEMPLATE_LANG: ${{ vars.WA_TEMPLATE_LANG || 'id' }}
+          WA_API_VERSION: ${{ vars.WA_API_VERSION || 'v25.0' }}
+        run: |
+          idxscreen notify \
+            --preset lonjakan \
+            --top 8 \
+            --max-stale-days 5 \
+            --refresh \
+            ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}
