@@ -287,6 +287,38 @@ idxscreen notify --preset lonjakan --top 15
 Pesannya dikirim sebagai HTML (`*tebal*` dan `_miring_` diubah otomatis),
 dipotong bila melewati batas 4096 huruf Telegram.
 
+### Batas harga di dalam pesan
+
+Tiap saham disertai satu baris batas harga:
+
+```
+1. FPNI +13,59% · Rp 585 · vol 2,67x
+    ARA hari ini Rp 640 · SMA20 Rp 580
+```
+
+Keduanya fakta, bukan ancar-ancar:
+
+- **ARA** - harga tertinggi yang boleh ditransaksikan hari ini. Di atasnya
+  order ditolak bursa. Dihitung dari penutupan kemarin dikali batas auto
+  reject atas, lalu dibulatkan **ke bawah** ke fraksi harga IDX; membulatkan
+  ke atas justru menghasilkan harga yang ditolak.
+- **SMA20** - syarat preset ini sendiri (`close > sma20`). Di bawah angka itu
+  saham tersebut tidak akan lolos saringan lagi.
+
+Yang diukur backtest hanyalah pembelian di **harga penutupan**. Kedua angka di
+atas menerangkan batas, bukan menyarankan titik masuk - rentang masuk apa pun
+di luar penutupan belum pernah diuji.
+
+Fraksi harga yang dipakai (`FRAKSI_HARGA` di [notify.py](idx_screener/notify.py)):
+
+| Harga | Tick |
+|---|---|
+| < Rp 200 | Rp 1 |
+| Rp 200 - < Rp 500 | Rp 2 |
+| Rp 500 - < Rp 2.000 | Rp 5 |
+| Rp 2.000 - < Rp 5.000 | Rp 10 |
+| >= Rp 5.000 | Rp 25 |
+
 ### WhatsApp
 
 Lewat **Meta Cloud API**. Lebih berliku - seluruh seluk-beluknya di bawah ini.
@@ -522,7 +554,7 @@ idx_screener/
 ├── universe.py         daftar emiten
 └── providers/yahoo.py  pengambilan data (massal + rinci) & penyeragaman satuan
 app.py                  antarmuka web Streamlit
-tests/                  117 test, seluruhnya memakai data sintetis
+tests/                  131 test, seluruhnya memakai data sintetis
 ```
 
 Menambah sumber data lain cukup menyediakan kelas dengan dua metode,
@@ -532,7 +564,7 @@ Menambah sumber data lain cukup menyediakan kelas dengan dua metode,
 ## Test
 
 ```bash
-make test        # 117 test, < 1 detik, tanpa jaringan
+make test        # 131 test, < 1 detik, tanpa jaringan
 ```
 
 ## Batasan data

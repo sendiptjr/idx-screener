@@ -113,13 +113,17 @@ def test_pesan_teks_saat_tidak_ada_yang_lolos():
     assert "Tidak ada emiten yang lolos" in teks
 
 
-def test_baris_slot_lebih_pendek_dari_baris_teks(hasil):
+def test_baris_teks_dan_slot_membawa_hal_berbeda(hasil):
+    """Mode teks punya baris kedua untuk batas harga, slot template tidak.
+
+    Karena itu ARA muncul sebagai persen di slot, sedangkan di mode teks ia
+    pindah ke baris level sebagai harga rupiah, dan tempatnya dipakai volume.
+    """
     row = hasil.iloc[0]
     teks = baris_saham(row, gaya="teks")
     slot = baris_saham(row, gaya="slot")
-    assert teks.startswith("TEBE +18,73% · Rp 1.965 · sisa ARA 6,27%")
-    assert "vol" in teks and "vol" not in slot     # rasio volume hanya di mode teks
-    assert len(slot) < len(teks)
+    assert teks == "TEBE +18,73% · Rp 1.965 · vol 3,99x"
+    assert slot == "TEBE +18,73% · Rp 1.965 · sisa ARA 6,27%"
 
 
 def test_baris_ringkas_hanya_kode_dan_persen(hasil):
@@ -349,3 +353,72 @@ def test_chat_id_dikumpulkan_tanpa_duplikat(monkeypatch):
     chats = notify.telegram_chats("t")
     assert [c["chat_id"] for c in chats] == ["42", "-100"]
     assert chats[0]["nama"] == "Sendi" and chats[1]["nama"] == "Saham"
+
+
+# ---------------- batas harga ----------------
+
+
+@pytest.mark.parametrize("harga,harapan", [
+    (156.6, 156),      # < 200  -> tick 1
+    (199.9, 199),
+    (483.0, 482),      # 200-500 -> tick 2
+    (643.75, 640),     # 500-2000 -> tick 5
+    (2001.0, 2000),    # 2000-5000 -> tick 10
+    (5124.0, 5100),    # >= 5000 -> tick 25
+])
+def test_harga_dibulatkan_ke_fraksi_idx(harga, harapan):
+    assert notify.bulatkan_tick(harga) == harapan
+
+
+def test_pembulatan_selalu_ke_bawah():
+    """Batas atas yang dibulatkan ke atas justru akan ditolak bursa."""
+    assert notify.bulatkan_tick(644.9) == 640
+    assert notify.bulatkan_tick(199.99) == 199
+
+
+def test_harga_ara_dihitung_dari_penutupan_kemarin():
+    row = pd.Series({"prev_close": 515.0, "ara_limit": 25.0, "close": 585.0})
+    assert notify.harga_ara(row) == 640          # 515 * 1,25 = 643,75 -> tick 5
+
+
+def test_harga_ara_kosong_bila_datanya_tidak_ada():
+    assert notify.harga_ara(pd.Series({"close": 100.0})) is None
+    assert notify.harga_ara(pd.Series({"prev_close": None, "ara_limit": 25.0})) is None
+
+
+def test_baris_level_memuat_ara_dan_sma20():
+    row = pd.Series({"prev_close": 515.0, "ara_limit": 25.0, "sma20": 583.0})
+    assert notify.baris_level(row) == "ARA hari ini Rp 640 · SMA20 Rp 580"
+
+
+def test_baris_level_tanpa_desimal_untuk_harga_kecil():
+    row = pd.Series({"prev_close": 116.0, "ara_limit": 35.0, "sma20": 95.45})
+    assert notify.baris_level(row) == "ARA hari ini Rp 156 · SMA20 Rp 95"
+
+
+def test_level_masuk_ke_pesan_teks():
+    frame = pd.DataFrame([{
+        "ticker": "FPNI", "change_pct": 13.59, "close": 585.0,
+        "prev_close": 515.0, "ara_limit": 25.0, "sma20": 583.0, "volume_ratio": 2.67,
+    }])
+    teks = format_text(frame, judul="Lonjakan", tanggal="2026-09-18", stale_days=0,
+                       total_scanned=845)
+    assert "ARA hari ini Rp 640" in teks
+    assert "bukan saran harga" in teks
+
+
+def test_level_bisa_dimatikan():
+    frame = pd.DataFrame([{
+        "ticker": "FPNI", "change_pct": 13.59, "close": 585.0,
+        "prev_close": 515.0, "ara_limit": 25.0, "sma20": 583.0,
+    }])
+    teks = format_text(frame, judul="Lonjakan", tanggal="2026-09-18", stale_days=0,
+                       total_scanned=845, sertakan_level=False)
+    assert "ARA hari ini" not in teks
+
+
+def test_slot_template_tetap_memakai_persen_bukan_harga():
+    """Slot tidak punya baris kedua, jadi sisa ARA tetap disebut di sana."""
+    row = pd.Series({"ticker": "FPNI", "change_pct": 13.59, "close": 585.0, "dist_ara": 11.41})
+    assert "sisa ARA 11,41%" in baris_saham(row, gaya="slot")
+    assert "sisa ARA" not in baris_saham(row, gaya="teks")

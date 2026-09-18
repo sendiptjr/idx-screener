@@ -16,6 +16,7 @@ dengan pemisah titik tengah.
 
 from __future__ import annotations
 
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -126,6 +127,54 @@ def konteks_data(tanggal: str, stale_days: int, *, sekarang: "pd.Timestamp | Non
     return f"penutupan {tanggal_id(tanggal)}"
 
 
+# Fraksi harga IDX: (batas atas harga, kelipatan tick).
+FRAKSI_HARGA = ((200, 1), (500, 2), (2000, 5), (5000, 10), (float("inf"), 25))
+
+
+def bulatkan_tick(harga: float) -> float:
+    """Bulatkan ke bawah ke kelipatan tick yang sah di IDX.
+
+    Ke bawah, bukan ke terdekat: angka ini dipakai sebagai batas atas, dan
+    membulatkan ke atas akan menghasilkan harga yang justru ditolak bursa.
+    """
+    for batas, tick in FRAKSI_HARGA:
+        if harga < batas:
+            return math.floor(harga / tick) * tick
+    return harga
+
+
+def harga_ara(row: pd.Series) -> float | None:
+    """Harga tertinggi yang boleh ditransaksikan hari ini (Rp).
+
+    Batas ARA dihitung dari penutupan kemarin, bukan dari harga sekarang.
+    """
+    prev, batas = row.get("prev_close"), row.get("ara_limit")
+    if prev is None or batas is None or pd.isna(prev) or pd.isna(batas):
+        return None
+    return bulatkan_tick(float(prev) * (1 + float(batas) / 100))
+
+
+def _rupiah_bulat(harga: float) -> str:
+    """Harga yang sudah dibulatkan ke tick tidak perlu desimal."""
+    return f"{int(round(harga)):,}".replace(",", ".")
+
+
+def baris_level(row: pd.Series) -> str:
+    """Batas harga yang sifatnya fakta, bukan ancar-ancar.
+
+    ARA adalah batas bursa; SMA20 adalah syarat preset ini sendiri, sehingga
+    di bawahnya saham tersebut tidak akan lolos saringan lagi.
+    """
+    bagian = []
+    ara = harga_ara(row)
+    if ara:
+        bagian.append(f"ARA hari ini Rp {_rupiah_bulat(ara)}")
+    sma20 = row.get("sma20")
+    if sma20 is not None and pd.notna(sma20):
+        bagian.append(f"SMA20 Rp {_rupiah_bulat(bulatkan_tick(float(sma20)))}")
+    return " · ".join(bagian)
+
+
 def _persen(value) -> str:
     teks = fmt(value, "change_pct")
     return f"+{teks}" if isinstance(value, (int, float)) and value > 0 else teks
@@ -146,7 +195,8 @@ def baris_saham(row: pd.Series, *, gaya: str = "teks") -> str:
     bagian = [kepala]
     if "close" in row.index and pd.notna(row.get("close")):
         bagian.append("Rp " + fmt(row["close"], "close"))
-    if "dist_ara" in row.index and pd.notna(row.get("dist_ara")):
+    if gaya == "slot" and "dist_ara" in row.index and pd.notna(row.get("dist_ara")):
+        # Slot template tidak punya baris kedua, jadi ARA tetap disebut di sini.
         bagian.append(f"sisa ARA {fmt(row['dist_ara'], 'dist_ara')}")
     if gaya == "teks" and "volume_ratio" in row.index and pd.notna(row.get("volume_ratio")):
         bagian.append(f"vol {fmt(row['volume_ratio'])}x")
@@ -162,6 +212,7 @@ def format_text(
     total_scanned: int,
     top: int = 10,
     catatan: str = "",
+    sertakan_level: bool = True,
 ) -> str:
     """Pesan teks bebas, berbaris banyak - hanya sah di dalam jendela 24 jam."""
     kepala = [
@@ -175,8 +226,16 @@ def format_text(
     else:
         for nomor, (_, row) in enumerate(frame.head(top).iterrows(), start=1):
             kepala.append(f"{nomor}. {baris_saham(row, gaya='teks')}")
+            if sertakan_level:
+                level = baris_level(row)
+                if level:
+                    kepala.append(f"    {level}")
         if len(frame) > top:
             kepala.append(f"_...dan {len(frame) - top} lainnya._")
+    if sertakan_level and not frame.empty:
+        kepala += ["", "_ARA adalah batas bursa hari ini, SMA20 adalah syarat saringan "
+                       "ini - keduanya fakta, bukan saran harga. Yang diukur backtest "
+                       "hanyalah pembelian di harga penutupan._"]
     if catatan:
         kepala += ["", f"_{catatan.strip()}_"]
     return "\n".join(kepala)
