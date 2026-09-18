@@ -307,6 +307,19 @@ Jumlah baris saham dipatok 8 (`SLOT_SAHAM` di
 [notify.py](idx_screener/notify.py)). Mengubahnya berarti mengubah badan
 template di Meta juga - keduanya harus cocok.
 
+**Template menempel pada WABA, bukan pada akun.** Kalau Anda punya lebih dari
+satu WhatsApp Business Account - misalnya satu bawaan berisi nomor test Meta,
+satu lagi berisi nomor produksi sendiri - template harus dibuat di WABA yang
+memuat nomor pengirim yang dipakai. Dibuat di WABA yang salah, pengiriman
+gagal dengan `132001` meski templatenya jelas-jelas APPROVED. Memeriksanya:
+
+```bash
+curl -s "https://graph.facebook.com/v25.0/<WABA_ID>/phone_numbers\
+?fields=id,display_phone_number&access_token=$WA_TOKEN"
+```
+
+`WA_PHONE_NUMBER_ID` harus salah satu id yang muncul di daftar itu.
+
 Satu jebakan kalau Anda perlu mengganti badan template kelak: **jangan hapus
 lalu buat ulang dengan nama sama.** Meta memblokir pemakaian ulang nama yang
 baru dihapus, dan pembuatan ulang akan ditolak berulang kali dengan
