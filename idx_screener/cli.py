@@ -158,7 +158,8 @@ def screen(
 
 @app.command()
 def notify(
-    preset: str = typer.Option("lonjakan", "--preset", "-p", help="Preset yang dikirim."),
+    preset: str = typer.Option("lonjakan", "--preset", "-p",
+                               help="Preset yang dikirim; boleh beberapa dipisah koma."),
     channel: str = typer.Option("auto", "--channel", help="auto | telegram | whatsapp."),
     to: Optional[str] = typer.Option(None, "--to", help="Tujuan (default: env WA_TO / TELEGRAM_CHAT_ID)."),
     top: int = typer.Option(8, "--top", help="Berapa saham teratas di pesan; template WA selalu 8 baris."),
@@ -167,6 +168,7 @@ def notify(
     dry_run: bool = typer.Option(False, "--dry-run", help="Cetak pesannya saja, jangan kirim."),
     max_stale_days: int = typer.Option(5, "--max-stale-days", help="Batalkan bila data bursa lebih tua dari ini (0 = abaikan)."),
     skip_empty: bool = typer.Option(False, "--skip-empty", help="Jangan kirim apa pun bila tidak ada yang lolos."),
+    tp_sl: bool = typer.Option(False, "--tp-sl/--no-tp-sl", help="Sertakan acuan TP/SL berbasis ATR."),
     tickers: Optional[str] = typer.Option(None, "--tickers", "-t"),
     universe_file: Optional[str] = typer.Option(None, "--universe", "-u"),
     max_deep: int = typer.Option(400, "--max-deep"),
@@ -186,90 +188,99 @@ def notify(
         channel = "telegram" if os.environ.get("TELEGRAM_TOKEN") else "whatsapp"
 
     presets = load_presets()
-    if preset not in presets:
-        console.print(f"[red]Preset '{preset}' tidak ada.[/red] Tersedia: {', '.join(sorted(presets))}")
+    diminta = [nama.strip() for nama in preset.split(",") if nama.strip()]
+    tidak_ada = [nama for nama in diminta if nama not in presets]
+    if tidak_ada:
+        console.print(f"[red]Preset tidak ada:[/red] {', '.join(tidak_ada)}. "
+                      f"Tersedia: {', '.join(sorted(presets))}")
         raise typer.Exit(2)
-    chosen = presets[preset]
+    terpilih = [presets[nama] for nama in diminta]
 
     screener = _build_screener(tickers, universe_file, offline, refresh)
-    console.print(f"[dim]Memindai {len(screener.universe)} emiten untuk preset '{preset}'...[/dim]")
-    try:
-        result = screener.run(preset=chosen, max_deep=max_deep, progress=_progress_printer())
-    except (RuleError, KeyError) as exc:
-        console.print(f"[red]Filter bermasalah:[/red] {exc}")
-        raise typer.Exit(2) from exc
-
-    if result.snapshot.empty:
+    console.print(f"[dim]Memindai {len(screener.universe)} emiten untuk "
+                  f"{len(terpilih)} preset...[/dim]")
+    # Data ditarik sekali lalu dipakai ulang semua preset.
+    snapshot = screener.snapshot(_progress_printer())
+    if snapshot.empty:
         console.print("[red]Tidak ada data harga sama sekali.[/red] Cek jaringan atau isi cache.")
         raise typer.Exit(1)
 
     # Hari bursa terakhir = tanggal terbaru di seluruh snapshot, bukan per baris.
-    stale = int(result.snapshot["stale_days"].min())
-    tanggal = str(result.snapshot.loc[result.snapshot["stale_days"].idxmin(), "last_date"])
+    stale = int(snapshot["stale_days"].min())
+    tanggal = str(snapshot.loc[snapshot["stale_days"].idxmin(), "last_date"])
     if max_stale_days and stale > max_stale_days:
         console.print(f"[yellow]Dibatalkan:[/yellow] data terakhir {tanggal_id(tanggal)} "
                       f"({stale} hari lalu) melewati --max-stale-days {max_stale_days}.")
         raise typer.Exit(0)
 
-    if result.matched.empty and skip_empty:
-        console.print("[yellow]Tidak ada yang lolos; pesan tidak dikirim (--skip-empty).[/yellow]")
-        raise typer.Exit(0)
+    gagal = 0
+    for chosen in terpilih:
+        try:
+            result = screener.run(preset=chosen, snapshot=snapshot, max_deep=max_deep,
+                                  progress=_progress_printer())
+        except (RuleError, KeyError) as exc:
+            console.print(f"[red]Filter '{chosen.name}' bermasalah:[/red] {exc}")
+            gagal += 1
+            continue
 
-    teks = format_text(
-        result.matched,
-        judul=chosen.title,
-        tanggal=tanggal,
-        stale_days=stale,
-        total_scanned=result.total_scanned,
-        top=top,
-        catatan=(chosen.note or "").strip().replace("\n", " "),
-    )
-    params = format_template_params(
-        result.matched,
-        tanggal=tanggal,
-        stale_days=stale,
-        total_scanned=result.total_scanned,
-    )
+        if result.matched.empty and skip_empty:
+            console.print(f"[yellow]{chosen.name}: tidak ada yang lolos, tidak dikirim.[/yellow]")
+            continue
+
+        teks = format_text(
+            result.matched,
+            judul=chosen.title,
+            tanggal=tanggal,
+            stale_days=stale,
+            total_scanned=result.total_scanned,
+            top=top,
+            catatan=(chosen.note or "").strip().replace("\n", " "),
+            sertakan_tpsl=tp_sl,
+        )
+        params = format_template_params(
+            result.matched,
+            tanggal=tanggal,
+            stale_days=stale,
+            total_scanned=result.total_scanned,
+        )
+
+        if dry_run:
+            console.print(Panel(teks, title=f"{chosen.name} -> {channel}", border_style="cyan"))
+            if channel == "whatsapp":
+                console.print(Panel(
+                    "\n".join(f"{{{{{i}}}}} = {p}" for i, p in enumerate(params, start=1)),
+                    title="parameter template", border_style="cyan",
+                ))
+            continue
+
+        try:
+            if channel == "telegram":
+                hasil = send_telegram(TelegramConfig.from_env(to), teks)
+                tujuan = f"Telegram chat {hasil.get('chat', {}).get('id', '-')}"
+                pesan_id = hasil.get("message_id", "-")
+            else:
+                config = WhatsAppConfig.from_env(to)
+                if template:
+                    config.template = template
+                jalur, response = send(config, text=teks, params=params, mode=mode)
+                tujuan = f"{config.to} lewat {jalur}"
+                pesan_id = (response.get("messages") or [{}])[0].get("id", "-")
+        except NotifyError as exc:
+            console.print(f"[red]Gagal mengirim '{chosen.name}':[/red] {exc}")
+            gagal += 1
+            continue
+        except Exception as exc:
+            console.print(f"[red]Gagal menghubungi {channel} untuk '{chosen.name}':[/red] {exc}")
+            gagal += 1
+            continue
+
+        console.print(f"[green]Terkirim[/green] ke {tujuan} - {chosen.name}: "
+                      f"{len(result.matched)} saham, data {tanggal_id(tanggal)}. id={pesan_id}")
 
     if dry_run:
-        console.print(Panel(teks, title=f"pesan {channel}", border_style="cyan"))
-        if channel == "whatsapp":
-            console.print(Panel(
-                "\n".join(f"{{{{{i}}}}} = {p}" for i, p in enumerate(params, start=1)),
-                title="parameter template", border_style="cyan",
-            ))
         console.print("[dim]--dry-run: tidak ada yang dikirim.[/dim]")
-        raise typer.Exit(0)
-
-    if channel == "telegram":
-        try:
-            hasil = send_telegram(TelegramConfig.from_env(to), teks)
-        except NotifyError as exc:
-            console.print(f"[red]Gagal mengirim:[/red] {exc}")
-            raise typer.Exit(1) from exc
-        except Exception as exc:
-            console.print(f"[red]Gagal menghubungi Telegram:[/red] {exc}")
-            raise typer.Exit(1) from exc
-        console.print(f"[green]Terkirim[/green] ke Telegram chat "
-                      f"{hasil.get('chat', {}).get('id', '-')} ({len(result.matched)} saham, "
-                      f"data {tanggal_id(tanggal)}). id={hasil.get('message_id', '-')}")
-        raise typer.Exit(0)
-
-    try:
-        config = WhatsAppConfig.from_env(to)
-        if template:
-            config.template = template
-        jalur, response = send(config, text=teks, params=params, mode=mode)
-    except NotifyError as exc:
-        console.print(f"[red]Gagal mengirim:[/red] {exc}")
-        raise typer.Exit(1) from exc
-    except Exception as exc:  # jaringan putus, DNS, timeout
-        console.print(f"[red]Gagal menghubungi Meta:[/red] {exc}")
-        raise typer.Exit(1) from exc
-
-    pesan_id = (response.get("messages") or [{}])[0].get("id", "-")
-    console.print(f"[green]Terkirim[/green] ke {config.to} lewat {jalur} "
-                  f"({len(result.matched)} saham, data {tanggal_id(tanggal)}). id={pesan_id}")
+    if gagal:
+        raise typer.Exit(1)
 
 
 @app.command("telegram-id")

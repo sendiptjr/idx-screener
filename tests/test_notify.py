@@ -404,7 +404,7 @@ def test_level_masuk_ke_pesan_teks():
     teks = format_text(frame, judul="Lonjakan", tanggal="2026-09-18", stale_days=0,
                        total_scanned=845)
     assert "ARA hari ini Rp 640" in teks
-    assert "bukan saran harga" in teks
+    assert "keduanya fakta" in teks
 
 
 def test_level_bisa_dimatikan():
@@ -422,3 +422,47 @@ def test_slot_template_tetap_memakai_persen_bukan_harga():
     row = pd.Series({"ticker": "FPNI", "change_pct": 13.59, "close": 585.0, "dist_ara": 11.41})
     assert "sisa ARA 11,41%" in baris_saham(row, gaya="slot")
     assert "sisa ARA" not in baris_saham(row, gaya="teks")
+
+
+def test_tp_sl_hanya_muncul_bila_diminta():
+    frame = pd.DataFrame([{
+        "ticker": "FPNI", "change_pct": 16.5, "close": 600.0,
+        "prev_close": 515.0, "ara_limit": 25.0, "sma20": 580.0, "atr14": 51.0,
+    }])
+    tanpa = format_text(frame, judul="L", tanggal="2026-09-18", stale_days=0, total_scanned=845)
+    dengan = format_text(frame, judul="L", tanggal="2026-09-18", stale_days=0,
+                         total_scanned=845, sertakan_tpsl=True)
+    assert "TP Rp" not in tanpa
+    assert "TP Rp 700 (+16,67%) · SL Rp 580 (-3,33%)" in dengan
+    assert "ancar-ancar" in dengan
+
+
+def test_sl_memakai_sma20_bila_lebih_dekat_ke_harga():
+    """SMA20 di atas batas ATR -> dipakai, sebab di sana premisnya gugur."""
+    row = pd.Series({"close": 600.0, "atr14": 51.0, "sma20": 580.0})
+    tp, sl = notify.level_tp_sl(row)          # 600 - 1,5*51 = 523,5 < 580
+    assert (tp, sl) == (700, 580)
+
+
+def test_sl_memakai_atr_bila_sma20_jauh_di_bawah():
+    """Fraksi ditentukan oleh harga level itu sendiri, bukan harga sahamnya.
+
+    SL 1.915 jatuh di bawah Rp 2.000, jadi ticknya Rp 5 - bukan Rp 10 seperti
+    harga sahamnya yang Rp 2.050.
+    """
+    row = pd.Series({"close": 2050.0, "atr14": 90.0, "sma20": 1595.0})
+    tp, sl = notify.level_tp_sl(row)          # 2050 - 135 = 1915 > 1595
+    assert (tp, sl) == (2230, 1915)
+
+
+def test_sma20_di_atas_harga_tidak_dipakai_sebagai_sl():
+    """Stop di atas harga beli tidak masuk akal."""
+    row = pd.Series({"close": 100.0, "atr14": 8.0, "sma20": 120.0})
+    _, sl = notify.level_tp_sl(row)
+    assert sl == 88
+
+
+def test_tanpa_atr_hanya_sl_dari_sma20():
+    row = pd.Series({"close": 600.0, "sma20": 580.0})
+    tp, sl = notify.level_tp_sl(row)
+    assert tp is None and sl == 580

@@ -175,6 +175,49 @@ def baris_level(row: pd.Series) -> str:
     return " · ".join(bagian)
 
 
+def level_tp_sl(row: pd.Series) -> tuple[float | None, float | None]:
+    """Acuan ambil untung dan batas rugi, dalam rupiah.
+
+    SL memakai yang lebih tinggi antara SMA20 dan `close - 1,5 x ATR14`: SMA20
+    adalah titik gugurnya premis untuk preset lonjakan, sedangkan kelipatan ATR
+    menjaga agar saham yang harganya jauh di atas SMA20 tidak dibiarkan turun
+    terlalu dalam. TP memakai `close + 2 x ATR14`.
+
+    Angka-angka ini ancar-ancar volatilitas, bukan hasil pengukuran: backtest
+    preset ini hanya menguji tahan 1-2 minggu lalu jual, tanpa TP/SL sama
+    sekali.
+    """
+    close, atr, sma20 = row.get("close"), row.get("atr14"), row.get("sma20")
+    if close is None or pd.isna(close):
+        return None, None
+    close = float(close)
+    punya_atr = atr is not None and pd.notna(atr)
+
+    tp = bulatkan_tick(close + 2 * float(atr)) if punya_atr else None
+
+    kandidat = []
+    if sma20 is not None and pd.notna(sma20) and float(sma20) < close:
+        kandidat.append(float(sma20))
+    if punya_atr:
+        kandidat.append(close - 1.5 * float(atr))
+    sl = bulatkan_tick(max(kandidat)) if kandidat else None
+    return tp, sl
+
+
+def baris_tp_sl(row: pd.Series) -> str:
+    tp, sl = level_tp_sl(row)
+    close = row.get("close")
+    if close is None or pd.isna(close) or (tp is None and sl is None):
+        return ""
+    close = float(close)
+    bagian = []
+    if tp:
+        bagian.append(f"TP Rp {_rupiah_bulat(tp)} ({_persen((tp / close - 1) * 100)})")
+    if sl:
+        bagian.append(f"SL Rp {_rupiah_bulat(sl)} ({_persen((sl / close - 1) * 100)})")
+    return " · ".join(bagian)
+
+
 def _persen(value) -> str:
     teks = fmt(value, "change_pct")
     return f"+{teks}" if isinstance(value, (int, float)) and value > 0 else teks
@@ -213,6 +256,7 @@ def format_text(
     top: int = 10,
     catatan: str = "",
     sertakan_level: bool = True,
+    sertakan_tpsl: bool = False,
 ) -> str:
     """Pesan teks bebas, berbaris banyak - hanya sah di dalam jendela 24 jam."""
     kepala = [
@@ -230,12 +274,24 @@ def format_text(
                 level = baris_level(row)
                 if level:
                     kepala.append(f"    {level}")
+            if sertakan_tpsl:
+                tpsl = baris_tp_sl(row)
+                if tpsl:
+                    kepala.append(f"    {tpsl}")
         if len(frame) > top:
             kepala.append(f"_...dan {len(frame) - top} lainnya._")
-    if sertakan_level and not frame.empty:
-        kepala += ["", "_ARA adalah batas bursa hari ini, SMA20 adalah syarat saringan "
-                       "ini - keduanya fakta, bukan saran harga. Yang diukur backtest "
-                       "hanyalah pembelian di harga penutupan._"]
+    if not frame.empty:
+        keterangan = []
+        if sertakan_level:
+            keterangan.append("ARA batas bursa hari ini, SMA20 syarat saringan ini - "
+                              "keduanya fakta.")
+        if sertakan_tpsl:
+            keterangan.append("TP/SL ancar-ancar volatilitas (2x dan 1,5x ATR14), bukan "
+                              "hasil pengukuran: backtest hanya menguji beli di penutupan "
+                              "lalu tahan 1-2 minggu, dan karena keunggulan datang dari "
+                              "sedikit pemenang besar, TP ketat justru memotongnya.")
+        if keterangan:
+            kepala += ["", "_" + " ".join(keterangan) + "_"]
     if catatan:
         kepala += ["", f"_{catatan.strip()}_"]
     return "\n".join(kepala)

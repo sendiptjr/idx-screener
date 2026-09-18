@@ -245,7 +245,7 @@ idxscreen notify --preset lonjakan --top 15
 
 | Opsi | Arti |
 |---|---|
-| `--preset` | preset yang dikirim (bawaan `lonjakan`) |
+| `--preset` | preset yang dikirim; beberapa dipisah koma, mis. `lonjakan,volume-spike` |
 | `--channel` | `auto` (bawaan) / `telegram` / `whatsapp` |
 | `--to` | tujuan; chat id Telegram, atau nomor WhatsApp (`081…`, `+62 …`, `62…`) |
 | `--top` | berapa saham teratas di pesan (bawaan 8); template WhatsApp selalu 8 baris |
@@ -253,6 +253,7 @@ idxscreen notify --preset lonjakan --top 15
 | `--dry-run` | cetak pesannya, jangan kirim |
 | `--max-stale-days` | batalkan bila data bursa lebih tua dari ini (bawaan 5) |
 | `--skip-empty` | diam saja bila tidak ada yang lolos |
+| `--tp-sl` | sertakan acuan TP/SL berbasis ATR (bawaan mati) |
 | `--refresh` | abaikan cache, ambil ulang dari Yahoo |
 
 Telegram jauh lebih sederhana dan disarankan untuk pemakaian pribadi:
@@ -308,6 +309,33 @@ Keduanya fakta, bukan ancar-ancar:
 Yang diukur backtest hanyalah pembelian di **harga penutupan**. Kedua angka di
 atas menerangkan batas, bukan menyarankan titik masuk - rentang masuk apa pun
 di luar penutupan belum pernah diuji.
+
+### TP/SL - dan kenapa bawaannya mati
+
+`--tp-sl` menambah satu baris lagi per saham:
+
+```
+1. FPNI +16,50% · Rp 600 · vol 3,09x
+    ARA hari ini Rp 640 · SMA20 Rp 580
+    TP Rp 700 (+16,67%) · SL Rp 580 (-3,33%)
+```
+
+- **TP** = `close + 2 x ATR14`
+- **SL** = yang lebih tinggi antara SMA20 dan `close - 1,5 x ATR14`. SMA20
+  dipakai karena di sanalah premis preset `lonjakan` gugur; kelipatan ATR
+  menjaga saham yang harganya jauh di atas SMA20 agar tidak dibiarkan turun
+  terlalu dalam. SMA20 yang berada di atas harga diabaikan - stop di atas
+  harga beli tidak masuk akal.
+
+Keduanya **ancar-ancar volatilitas, bukan hasil pengukuran.** Backtest preset
+ini hanya menguji satu hal: beli di harga penutupan, tahan 1-2 minggu, jual.
+Tanpa TP, tanpa SL.
+
+Dan ada alasan kenapa itu bukan kelalaian. Catatan preset `lonjakan` berbunyi
+median 1-2 minggunya **negatif**, sehingga seluruh keunggulan datang dari
+sedikit pemenang besar. TP yang ketat memotong justru pemenang-pemenang itu,
+dan yang tersisa hanyalah median yang negatif tadi. Karena itu bawaannya mati,
+dan ketika dinyalakan pesannya menyebutkan sendiri keterbatasan ini.
 
 Fraksi harga yang dipakai (`FRAKSI_HARGA` di [notify.py](idx_screener/notify.py)):
 
@@ -554,7 +582,7 @@ idx_screener/
 ├── universe.py         daftar emiten
 └── providers/yahoo.py  pengambilan data (massal + rinci) & penyeragaman satuan
 app.py                  antarmuka web Streamlit
-tests/                  131 test, seluruhnya memakai data sintetis
+tests/                  136 test, seluruhnya memakai data sintetis
 ```
 
 Menambah sumber data lain cukup menyediakan kelas dengan dua metode,
@@ -564,7 +592,7 @@ Menambah sumber data lain cukup menyediakan kelas dengan dua metode,
 ## Test
 
 ```bash
-make test        # 131 test, < 1 detik, tanpa jaringan
+make test        # 136 test, < 1 detik, tanpa jaringan
 ```
 
 ## Batasan data

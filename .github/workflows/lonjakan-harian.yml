@@ -56,7 +56,8 @@ jobs:
           WA_API_VERSION: ${{ vars.WA_API_VERSION || 'v25.0' }}
         run: |
           idxscreen notify \
-            --preset lonjakan \
+            --preset lonjakan,volume-spike \
+            --tp-sl \
             --top 15 \
             --max-stale-days 5 \
             --refresh \
