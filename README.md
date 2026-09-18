@@ -102,6 +102,32 @@ tombol muat ulang data. Halaman utama menampilkan tabel hasil, corong filter,
 peta sebaran dua metrik (mis. PER vs ROE), serta grafik candlestick + volume +
 RSI untuk emiten yang dipilih.
 
+## Kesegaran data dan cache
+
+Harga dan fundamental mengendap di SQLite (`.cache/cache.db`) supaya screening
+berulang tidak menunggu jaringan. Umur simpannya bisa diatur:
+
+| Variabel | Bawaan | Arti |
+|---|---|---|
+| `IDX_SCREENER_PRICE_TTL` | 6 | jam, sebelum harga diambil ulang |
+| `IDX_SCREENER_FUNDAMENTAL_TTL` | 24 | jam, sebelum fundamental diambil ulang |
+
+Bawaan 6 jam cocok untuk pemakaian lokal sesekali, tetapi **terlalu lama untuk
+aplikasi web yang dibuka sepanjang jam bursa**: harga yang ditarik sebelum
+bursa buka akan bertahan sampai siang, dan metrik "Data per" akan menunjukkan
+tanggal kemarin padahal bursa sudah berjalan. Di Streamlit Cloud, setel
+`IDX_SCREENER_PRICE_TTL=1` lewat Settings → Secrets.
+
+Cache Streamlit sendiri mengikuti setelan yang sama (`CACHE_TTL` di
+[app.py](app.py)), dibatasi paling lama 1 jam, supaya kedua lapis tidak saling
+menambah. Tombol **"Muat ulang data"** di sidebar melewati keduanya.
+
+Di baris perintah, `--refresh` melakukan hal yang sama:
+
+```bash
+idxscreen screen --preset lonjakan --refresh
+```
+
 ## Dua lapis data
 
 Memanggil `Ticker.info` Yahoo satu per satu untuk 845 emiten kena rate limit di

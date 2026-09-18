@@ -11,6 +11,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from idx_screener import indicators as ind
+from idx_screener.config import PRICE_TTL_HOURS
 from idx_screener.metrics import FIELD_DOCS, NUMERIC_FIELDS
 from idx_screener.presets import load_presets
 from idx_screener.report import fmt
@@ -24,8 +25,13 @@ st.set_page_config(page_title="Screener Saham IDX", page_icon="📈", layout="wi
 PRESETS = load_presets()
 UNIVERSE = load_universe()
 
+# Cache Streamlit tidak boleh menahan lebih lama daripada cache harga di
+# bawahnya, kalau tidak kedua lapis saling menambah dan harga bisa tertinggal
+# berjam-jam. Atur keduanya sekaligus lewat IDX_SCREENER_PRICE_TTL.
+CACHE_TTL = min(3600, int(PRICE_TTL_HOURS * 3600))
 
-@st.cache_data(show_spinner=False, ttl=3600)
+
+@st.cache_data(show_spinner=False, ttl=CACHE_TTL)
 def get_snapshot(refresh: bool, offline: bool) -> tuple[pd.DataFrame, dict]:
     provider = YahooProvider(offline=offline, force_refresh=refresh)
     screener = Screener(provider=provider, universe=UNIVERSE)
@@ -33,7 +39,7 @@ def get_snapshot(refresh: bool, offline: bool) -> tuple[pd.DataFrame, dict]:
     return frame, dict(provider.errors)
 
 
-@st.cache_data(show_spinner=False, ttl=3600)
+@st.cache_data(show_spinner=False, ttl=CACHE_TTL)
 def get_prices(ticker: str) -> pd.DataFrame:
     from idx_screener.universe import Emiten
 
