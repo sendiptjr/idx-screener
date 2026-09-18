@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -15,11 +16,14 @@ from .config import HISTORY_PERIOD, UNIVERSE_CSV
 from .metrics import FIELD_DOCS
 from .notify import (
     NotifyError,
+    TelegramConfig,
     WhatsAppConfig,
     format_template_params,
     format_text,
     send,
+    send_telegram,
     tanggal_id,
+    telegram_chats,
 )
 from .presets import load_presets
 from .providers.yahoo import YahooProvider, bulk_sectors, list_equities
@@ -155,9 +159,10 @@ def screen(
 @app.command()
 def notify(
     preset: str = typer.Option("lonjakan", "--preset", "-p", help="Preset yang dikirim."),
-    to: Optional[str] = typer.Option(None, "--to", help="Nomor WhatsApp tujuan (default: env WA_TO)."),
-    top: int = typer.Option(8, "--top", help="Berapa saham teratas di pesan teks; template selalu 8 baris."),
-    mode: str = typer.Option("auto", "--mode", help="auto | text | template."),
+    channel: str = typer.Option("auto", "--channel", help="auto | telegram | whatsapp."),
+    to: Optional[str] = typer.Option(None, "--to", help="Tujuan (default: env WA_TO / TELEGRAM_CHAT_ID)."),
+    top: int = typer.Option(8, "--top", help="Berapa saham teratas di pesan; template WA selalu 8 baris."),
+    mode: str = typer.Option("auto", "--mode", help="WhatsApp saja: auto | text | template."),
     template: Optional[str] = typer.Option(None, "--template", help="Nama template Meta (default: env WA_TEMPLATE)."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Cetak pesannya saja, jangan kirim."),
     max_stale_days: int = typer.Option(5, "--max-stale-days", help="Batalkan bila data bursa lebih tua dari ini (0 = abaikan)."),
@@ -168,7 +173,18 @@ def notify(
     offline: bool = typer.Option(False, "--offline", help="Hanya pakai cache, tanpa jaringan."),
     refresh: bool = typer.Option(False, "--refresh", help="Paksa ambil ulang dari Yahoo."),
 ):
-    """Jalankan preset lalu kirim hasilnya ke WhatsApp (Meta Cloud API)."""
+    """Jalankan preset lalu kirim hasilnya ke Telegram atau WhatsApp.
+
+    `--channel auto` memilih Telegram bila TELEGRAM_TOKEN terpasang, selain itu
+    WhatsApp. Telegram tidak memerlukan template, jadi seluruh daftar dikirim
+    apa adanya; WhatsApp di luar jendela 24 jam wajib lewat template.
+    """
+    if channel not in {"auto", "telegram", "whatsapp"}:
+        console.print(f"[red]Kanal tidak dikenal:[/red] {channel}")
+        raise typer.Exit(2)
+    if channel == "auto":
+        channel = "telegram" if os.environ.get("TELEGRAM_TOKEN") else "whatsapp"
+
     presets = load_presets()
     if preset not in presets:
         console.print(f"[red]Preset '{preset}' tidak ada.[/red] Tersedia: {', '.join(sorted(presets))}")
@@ -216,12 +232,27 @@ def notify(
     )
 
     if dry_run:
-        console.print(Panel(teks, title="pesan teks (jendela 24 jam)", border_style="cyan"))
-        console.print(Panel(
-            "\n".join(f"{{{{{i}}}}} = {p}" for i, p in enumerate(params, start=1)),
-            title="parameter template", border_style="cyan",
-        ))
+        console.print(Panel(teks, title=f"pesan {channel}", border_style="cyan"))
+        if channel == "whatsapp":
+            console.print(Panel(
+                "\n".join(f"{{{{{i}}}}} = {p}" for i, p in enumerate(params, start=1)),
+                title="parameter template", border_style="cyan",
+            ))
         console.print("[dim]--dry-run: tidak ada yang dikirim.[/dim]")
+        raise typer.Exit(0)
+
+    if channel == "telegram":
+        try:
+            hasil = send_telegram(TelegramConfig.from_env(to), teks)
+        except NotifyError as exc:
+            console.print(f"[red]Gagal mengirim:[/red] {exc}")
+            raise typer.Exit(1) from exc
+        except Exception as exc:
+            console.print(f"[red]Gagal menghubungi Telegram:[/red] {exc}")
+            raise typer.Exit(1) from exc
+        console.print(f"[green]Terkirim[/green] ke Telegram chat "
+                      f"{hasil.get('chat', {}).get('id', '-')} ({len(result.matched)} saham, "
+                      f"data {tanggal_id(tanggal)}). id={hasil.get('message_id', '-')}")
         raise typer.Exit(0)
 
     try:
@@ -239,6 +270,37 @@ def notify(
     pesan_id = (response.get("messages") or [{}])[0].get("id", "-")
     console.print(f"[green]Terkirim[/green] ke {config.to} lewat {jalur} "
                   f"({len(result.matched)} saham, data {tanggal_id(tanggal)}). id={pesan_id}")
+
+
+@app.command("telegram-id")
+def telegram_id():
+    """Tampilkan chat id yang pernah menyapa bot Telegram Anda.
+
+    Kirim dulu satu pesan apa saja ke bot dari akun tujuan, lalu jalankan ini.
+    """
+    token = os.environ.get("TELEGRAM_TOKEN")
+    if not token:
+        console.print("[red]TELEGRAM_TOKEN belum diset.[/red] Ambil dari @BotFather.")
+        raise typer.Exit(2)
+    try:
+        chats = telegram_chats(token)
+    except NotifyError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+    if not chats:
+        console.print("[yellow]Belum ada chat.[/yellow] Kirim satu pesan ke bot Anda "
+                      "dari akun tujuan, lalu ulangi perintah ini.")
+        raise typer.Exit(0)
+    from rich.table import Table
+
+    table = Table(title="Chat yang mengenal bot ini", header_style="bold cyan")
+    table.add_column("chat_id", style="bold")
+    table.add_column("Nama")
+    table.add_column("Jenis", style="dim")
+    for chat in chats:
+        table.add_row(chat["chat_id"], chat["nama"], chat["jenis"])
+    console.print(table)
+    console.print("[dim]Pasang nilainya sebagai TELEGRAM_CHAT_ID.[/dim]")
 
 
 @app.command()

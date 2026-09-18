@@ -18,7 +18,7 @@ idxscreen screen --preset value --funnel
 - Skor peringkat gabungan berbobot
 - Backtest berbasis harga dengan penolakan otomatis terhadap look-ahead bias
 - Antarmuka web Streamlit dengan grafik candlestick, volume, dan RSI
-- Kiriman WhatsApp terjadwal lewat Meta Cloud API
+- Kiriman terjadwal ke Telegram atau WhatsApp
 - Ekspor CSV / JSON / Excel / Markdown
 
 ## Pemasangan
@@ -228,28 +228,68 @@ sampai setara lempar koin. Pada horizon 1 hari, seluruh varian merugi setelah
 ongkos; yang menguntungkan besok hanyalah saham yang terkunci ARA sore ini, dan
 saham itu tidak bisa dibeli.
 
-## Kirim ke WhatsApp tiap pagi
+## Kirim hasil screening ke ponsel
 
-`idxscreen notify` menjalankan sebuah preset lalu mengirim hasilnya ke WhatsApp
-lewat **Meta Cloud API**. Bawaannya preset `lonjakan`.
+`idxscreen notify` menjalankan sebuah preset lalu mengirim hasilnya ke
+**Telegram** atau **WhatsApp**. Bawaannya preset `lonjakan`, dan kanalnya
+dipilih otomatis: Telegram bila `TELEGRAM_TOKEN` terpasang, selain itu
+WhatsApp.
 
 ```bash
 # lihat pesannya dulu, tanpa mengirim apa pun
 idxscreen notify --dry-run --offline
 
 # kirim beneran
-idxscreen notify --preset lonjakan --top 10
+idxscreen notify --preset lonjakan --top 15
 ```
 
 | Opsi | Arti |
 |---|---|
 | `--preset` | preset yang dikirim (bawaan `lonjakan`) |
-| `--to` | nomor tujuan; `081…`, `+62 …`, dan `62…` sama saja |
-| `--top` | berapa saham teratas di pesan teks (bawaan 8); template selalu 8 baris |
-| `--mode` | `auto` (bawaan) / `text` / `template` |
+| `--channel` | `auto` (bawaan) / `telegram` / `whatsapp` |
+| `--to` | tujuan; chat id Telegram, atau nomor WhatsApp (`081…`, `+62 …`, `62…`) |
+| `--top` | berapa saham teratas di pesan (bawaan 8); template WhatsApp selalu 8 baris |
+| `--mode` | WhatsApp saja: `auto` (bawaan) / `text` / `template` |
 | `--dry-run` | cetak pesannya, jangan kirim |
 | `--max-stale-days` | batalkan bila data bursa lebih tua dari ini (bawaan 5) |
 | `--skip-empty` | diam saja bila tidak ada yang lolos |
+| `--refresh` | abaikan cache, ambil ulang dari Yahoo |
+
+Telegram jauh lebih sederhana dan disarankan untuk pemakaian pribadi:
+
+| | Telegram | WhatsApp Cloud API |
+|---|---|---|
+| Biaya | gratis | gratis pada volume kecil |
+| Persetujuan pesan | tidak ada | template wajib direview Meta |
+| Jendela 24 jam | tidak ada | ada; kiriman terjadwal wajib template |
+| Bentuk pesan | teks penuh, berbaris banyak | 8 baris slot, panjang parameter terbatas |
+| Pemasangan | ~5 menit | jam sampai hari |
+
+### Telegram
+
+1. Chat ke [@BotFather](https://t.me/BotFather), kirim `/newbot`, ikuti
+   petunjuknya. Anda mendapat token berbentuk `123456:ABC-DEF...`.
+2. Kirim satu pesan apa saja ke bot baru itu dari akun yang akan menerima.
+3. Cari chat id-nya:
+
+```bash
+export TELEGRAM_TOKEN=123456:ABC-DEF...
+idxscreen telegram-id
+```
+
+4. Pasang hasilnya dan kirim:
+
+```bash
+export TELEGRAM_CHAT_ID=123456789
+idxscreen notify --preset lonjakan --top 15
+```
+
+Pesannya dikirim sebagai HTML (`*tebal*` dan `_miring_` diubah otomatis),
+dipotong bila melewati batas 4096 huruf Telegram.
+
+### WhatsApp
+
+Lewat **Meta Cloud API**. Lebih berliku - seluruh seluk-beluknya di bawah ini.
 
 ### Kenapa harus lewat template
 
@@ -371,7 +411,7 @@ siapa pun bisa dikirimi.
 
 ### Penjadwalan
 
-[.github/workflows/wa-lonjakan.yml](.github/workflows/wa-lonjakan.yml)
+[.github/workflows/lonjakan-harian.yml](.github/workflows/lonjakan-harian.yml)
 menjalankannya dua kali tiap hari bursa:
 
 | Cron (UTC) | WIB | Keadaan bursa | Isi pesan |
@@ -387,9 +427,9 @@ Pesannya menandai sendiri potret kapan yang dikirim: `penutupan Kamis, 17 Sep
 untuk kiriman sore. Pembedanya `stale_days`: bernilai 0 berarti bar hari ini
 sudah ada, artinya bursa masih berjalan.
 
-Simpan keempat nilai di atas sebagai **Repository secrets** (`WA_TOKEN`,
-`WA_PHONE_NUMBER_ID`, `WA_TO`, `WA_TEMPLATE`), lalu uji sekali lewat tombol
-*Run workflow* dengan `dry_run` menyala.
+Pasang secret sesuai kanal yang dipakai - `TELEGRAM_TOKEN` + `TELEGRAM_CHAT_ID`,
+atau `WA_TOKEN` + `WA_PHONE_NUMBER_ID` + `WA_TO` + `WA_TEMPLATE`. Cukup salah
+satu set. Lalu uji sekali lewat tombol *Run workflow* dengan `dry_run` menyala.
 
 Cron GitHub tidak dijamin tepat waktu - meleset 5-15 menit itu biasa. Untuk
 kiriman 15:00 keterlambatan lebih terasa karena bursa tutup sekitar 15.50.
@@ -477,12 +517,12 @@ idx_screener/
 ├── presets.py          pemuat strategi YAML
 ├── backtest.py         uji historis + penjaga look-ahead bias
 ├── report.py           tabel terminal, format angka Indonesia, ekspor
-├── notify.py           perangkaian pesan & pengiriman WhatsApp (Meta Cloud API)
+├── notify.py           perangkaian pesan & pengiriman (Telegram, WhatsApp)
 ├── cache.py            cache SQLite untuk harga dan fundamental
 ├── universe.py         daftar emiten
 └── providers/yahoo.py  pengambilan data (massal + rinci) & penyeragaman satuan
 app.py                  antarmuka web Streamlit
-tests/                  109 test, seluruhnya memakai data sintetis
+tests/                  117 test, seluruhnya memakai data sintetis
 ```
 
 Menambah sumber data lain cukup menyediakan kelas dengan dua metode,
@@ -492,7 +532,7 @@ Menambah sumber data lain cukup menyediakan kelas dengan dua metode,
 ## Test
 
 ```bash
-make test        # 109 test, < 1 detik, tanpa jaringan
+make test        # 117 test, < 1 detik, tanpa jaringan
 ```
 
 ## Batasan data

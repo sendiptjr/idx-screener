@@ -16,6 +16,7 @@ from idx_screener.notify import (
     format_template_params,
     konteks_data,
     format_text,
+    markdown_ke_html,
     normalize_phone,
     sanitize_param,
     send,
@@ -37,6 +38,7 @@ class FakeResponse:
         self._payload = payload
         self.status_code = status
         self.text = str(payload)
+        self.content = b"x"
 
     def json(self) -> dict:
         return self._payload
@@ -267,3 +269,83 @@ def test_konfigurasi_dari_env_lengkap(monkeypatch):
     config = WhatsAppConfig.from_env("081234567890")
     assert config.to == "6281234567890"
     assert config.template == "idx_lonjakan_harian"
+
+
+# ---------------- Telegram ----------------
+
+
+def test_markdown_diubah_ke_html():
+    assert markdown_ke_html("*tebal*") == "<b>tebal</b>"
+    assert markdown_ke_html("_miring_") == "<i>miring</i>"
+
+
+def test_html_meloloskan_karakter_khusus():
+    hasil = markdown_ke_html("a & b <c> d")
+    assert hasil == "a &amp; b &lt;c&gt; d"
+
+
+def test_tanda_baca_pesan_tidak_merusak_konversi(hasil):
+    teks = format_text(hasil, judul="Lonjakan", tanggal="2026-09-17", stale_days=1,
+                       total_scanned=845, catatan="Median 1-2 minggu negatif (-0,8%).")
+    html = markdown_ke_html(teks)
+    assert "<b>Lonjakan</b>" in html
+    assert "(-0,8%)" in html          # tanda kurung dan minus lewat apa adanya
+    assert "TEBE +18,73%" in html
+
+
+def test_pesan_telegram_dipotong_di_batas(monkeypatch):
+    dikirim = {}
+
+    def fake_post(url, json, timeout):
+        dikirim.update(json=json)
+        return FakeResponse({"ok": True, "result": {"message_id": 7, "chat": {"id": 42}}})
+
+    monkeypatch.setattr(notify.requests, "post", fake_post)
+    config = notify.TelegramConfig(token="t", chat_id="42")
+    notify.send_telegram(config, "x" * 6000)
+    assert len(dikirim["json"]["text"]) <= notify.TELEGRAM_LIMIT
+
+
+def test_kirim_telegram_membentuk_payload(monkeypatch):
+    dikirim = {}
+
+    def fake_post(url, json, timeout):
+        dikirim.update(url=url, json=json)
+        return FakeResponse({"ok": True, "result": {"message_id": 7, "chat": {"id": 42}}})
+
+    monkeypatch.setattr(notify.requests, "post", fake_post)
+    hasil = notify.send_telegram(notify.TelegramConfig(token="rahasia", chat_id="42"), "*halo*")
+    assert hasil["message_id"] == 7
+    assert dikirim["url"].endswith("/botrahasia/sendMessage")
+    assert dikirim["json"]["parse_mode"] == "HTML"
+    assert dikirim["json"]["text"] == "<b>halo</b>"
+    assert dikirim["json"]["chat_id"] == "42"
+
+
+def test_telegram_menolak_dilaporkan_apa_adanya(monkeypatch):
+    monkeypatch.setattr(notify.requests, "post", lambda url, json, timeout:
+                        FakeResponse({"ok": False, "error_code": 400,
+                                      "description": "chat not found"}, 400))
+    with pytest.raises(NotifyError, match="chat not found"):
+        notify.send_telegram(notify.TelegramConfig(token="t", chat_id="salah"), "halo")
+
+
+def test_konfigurasi_telegram_menyebut_yang_kurang(monkeypatch):
+    monkeypatch.delenv("TELEGRAM_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_CHAT_ID", raising=False)
+    with pytest.raises(NotifyError) as exc:
+        notify.TelegramConfig.from_env()
+    assert "TELEGRAM_TOKEN" in str(exc.value) and "TELEGRAM_CHAT_ID" in str(exc.value)
+
+
+def test_chat_id_dikumpulkan_tanpa_duplikat(monkeypatch):
+    updates = {"ok": True, "result": [
+        {"message": {"chat": {"id": 42, "type": "private", "first_name": "Sendi"}}},
+        {"message": {"chat": {"id": 42, "type": "private", "first_name": "Sendi"}}},
+        {"channel_post": {"chat": {"id": -100, "type": "channel", "title": "Saham"}}},
+    ]}
+    monkeypatch.setattr(notify.requests, "get",
+                        lambda url, timeout: FakeResponse(updates))
+    chats = notify.telegram_chats("t")
+    assert [c["chat_id"] for c in chats] == ["42", "-100"]
+    assert chats[0]["nama"] == "Sendi" and chats[1]["nama"] == "Saham"

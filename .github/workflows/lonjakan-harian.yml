@@ -1,4 +1,8 @@
-# Kirim preset "Lonjakan yang masih bisa dibeli" ke WhatsApp dua kali sehari.
+# Kirim preset "Lonjakan yang masih bisa dibeli" dua kali sehari.
+#
+# Kanalnya dipilih sendiri oleh `idxscreen notify`: Telegram bila
+# TELEGRAM_TOKEN terpasang, selain itu WhatsApp. Pasang salah satu set
+# secret saja - tidak perlu keduanya.
 #
 # WIB = UTC+7 dan tidak pernah berganti tanggal pada jam-jam ini, jadi hari
 # cron-nya sama persis dengan hari WIB: 1-5 = Senin-Jumat.
@@ -6,7 +10,7 @@
 # Cron GitHub sering telat 5-15 menit saat antrean padat; kalau ketepatan
 # waktu penting - dan untuk kiriman 15:00 itu lebih terasa karena bursa tutup
 # sekitar 15.50 - pindahkan ke cron di VPS sendiri.
-name: WA lonjakan harian
+name: Lonjakan harian
 
 on:
   schedule:
@@ -42,6 +46,8 @@ jobs:
 
       - name: Screening dan kirim
         env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           WA_TOKEN: ${{ secrets.WA_TOKEN }}
           WA_PHONE_NUMBER_ID: ${{ secrets.WA_PHONE_NUMBER_ID }}
           WA_TO: ${{ secrets.WA_TO }}
@@ -51,7 +57,7 @@ jobs:
         run: |
           idxscreen notify \
             --preset lonjakan \
-            --top 8 \
+            --top 15 \
             --max-stale-days 5 \
             --refresh \
             ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}

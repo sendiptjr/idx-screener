@@ -1,4 +1,4 @@
-"""Kirim hasil screening ke WhatsApp lewat Meta Cloud API (resmi).
+"""Kirim hasil screening ke WhatsApp (Meta Cloud API) atau Telegram.
 
 Alur sehari-hari: cron memanggil `idxscreen notify --preset lonjakan`,
 hasilnya dirangkai jadi pesan, lalu dikirim ke nomor tujuan.
@@ -26,6 +26,10 @@ import requests
 from .report import fmt
 
 API_HOST = "https://graph.facebook.com"
+TELEGRAM_HOST = "https://api.telegram.org"
+
+# Batas satu pesan Telegram.
+TELEGRAM_LIMIT = 4096
 DEFAULT_API_VERSION = "v25.0"
 
 # Kode galat Meta yang berarti "jendela 24 jam tertutup, wajib pakai template".
@@ -219,6 +223,95 @@ def format_template_params(
     else:
         params.append(SLOT_KOSONG)
     return params
+
+
+# --------------------------------------------------------------------------
+# Telegram
+#
+# Jauh lebih sederhana daripada Cloud API: tidak ada template, tidak ada
+# review, tidak ada jendela 24 jam. Pesan teks berbaris banyak dikirim apa
+# adanya, jadi format yang sama dipakai tanpa dipotong-potong ke slot.
+
+
+@dataclass
+class TelegramConfig:
+    token: str
+    chat_id: str
+
+    @classmethod
+    def from_env(cls, chat_id: str | None = None) -> "TelegramConfig":
+        tujuan = chat_id or os.environ.get("TELEGRAM_CHAT_ID", "")
+        kurang = [
+            nama for nama, nilai in (
+                ("TELEGRAM_TOKEN", os.environ.get("TELEGRAM_TOKEN")),
+                ("TELEGRAM_CHAT_ID (atau opsi --to)", tujuan),
+            ) if not nilai
+        ]
+        if kurang:
+            raise NotifyError("Belum diset: " + ", ".join(kurang))
+        return cls(token=os.environ["TELEGRAM_TOKEN"], chat_id=str(tujuan))
+
+
+def markdown_ke_html(teks: str) -> str:
+    """`*tebal*` dan `_miring_` -> HTML yang dimengerti Telegram.
+
+    Dipakai mode HTML, bukan Markdown, karena tanda baca di dalam pesan
+    (tanda kurung, minus, persen) membuat parser Markdown Telegram rewel
+    sementara HTML hanya perlu meloloskan tiga karakter.
+    """
+    aman = teks.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    aman = re.sub(r"\*([^*\n]+)\*", r"<b>\1</b>", aman)
+    aman = re.sub(r"_([^_]+)_", r"<i>\1</i>", aman, flags=re.S)
+    return aman
+
+
+def _telegram(config: TelegramConfig, metode: str, payload: dict, timeout: float) -> dict:
+    response = requests.post(
+        f"{TELEGRAM_HOST}/bot{config.token}/{metode}", json=payload, timeout=timeout
+    )
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+    if not body.get("ok"):
+        raise NotifyError(
+            f"Telegram menolak ({response.status_code}/{body.get('error_code')}): "
+            + (body.get("description") or response.text[:200])
+        )
+    return body["result"]
+
+
+def send_telegram(config: TelegramConfig, text: str, *, timeout: float = 30.0) -> dict:
+    isi = markdown_ke_html(text)
+    if len(isi) > TELEGRAM_LIMIT:
+        isi = isi[: TELEGRAM_LIMIT - 20].rsplit("\n", 1)[0] + "\n..."
+    return _telegram(config, "sendMessage", {
+        "chat_id": config.chat_id,
+        "text": isi,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }, timeout)
+
+
+def telegram_chats(token: str, *, timeout: float = 30.0) -> list[dict]:
+    """Daftar chat yang pernah menyapa bot ini - untuk menemukan chat id."""
+    response = requests.get(f"{TELEGRAM_HOST}/bot{token}/getUpdates", timeout=timeout)
+    body = response.json() if response.content else {}
+    if not body.get("ok"):
+        raise NotifyError(
+            f"Telegram menolak: {body.get('description') or response.text[:200]}"
+        )
+    terlihat: dict[str, dict] = {}
+    for update in body.get("result", []):
+        pesan = update.get("message") or update.get("channel_post") or {}
+        chat = pesan.get("chat") or {}
+        if chat.get("id") is not None:
+            nama = chat.get("title") or " ".join(
+                bagian for bagian in (chat.get("first_name"), chat.get("last_name")) if bagian
+            ) or chat.get("username") or "-"
+            terlihat[str(chat["id"])] = {"chat_id": str(chat["id"]), "nama": nama,
+                                         "jenis": chat.get("type", "-")}
+    return list(terlihat.values())
 
 
 # --------------------------------------------------------------------------
