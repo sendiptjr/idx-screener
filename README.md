@@ -254,6 +254,7 @@ idxscreen notify --preset lonjakan --top 15
 | `--max-stale-days` | batalkan bila data bursa lebih tua dari ini (bawaan 5) |
 | `--skip-empty` | diam saja bila tidak ada yang lolos |
 | `--tp-sl` | sertakan acuan TP/SL berbasis ATR (bawaan mati) |
+| `--news` | kirim juga emiten yang disebut berita semalam |
 | `--refresh` | abaikan cache, ambil ulang dari Yahoo |
 
 Telegram jauh lebih sederhana dan disarankan untuk pemakaian pribadi:
@@ -469,6 +470,54 @@ Selama aplikasi Meta masih berstatus *development*, nomor tujuan harus
 didaftarkan dulu sebagai penerima uji di API Setup. Setelah aplikasi live,
 siapa pun bisa dikirimi.
 
+## Emiten yang disebut berita
+
+`--news` menambah satu pesan lagi: emiten yang namanya muncul di berita pasar
+semalam.
+
+```bash
+idxscreen notify --news --dry-run
+```
+
+Jendelanya bawaan **15.00 hari bursa sebelumnya sampai 08.00 hari ini**, bisa
+digeser dengan `--news-dari` dan `--news-sampai`. Hari bursa sebelumnya, bukan
+kemarin: dijalankan Senin pagi jendelanya mundur sampai Jumat sore, supaya
+berita akhir pekan tidak hilang.
+
+Sumbernya RSS CNBC Indonesia (pasar dan investment). Kontan dan Bisnis.com
+membalas 403 untuk permintaan otomatis, jadi tidak dipakai.
+
+### Cara nama dicocokkan ke emiten
+
+Tiga jalur, dari yang paling meyakinkan:
+
+1. **Kode emiten** ditulis apa adanya di judul - `BYAN`, `CPIN`.
+2. **Nama perusahaan**, dengan dua bentuk penanda. Kata tunggal harus cocok
+   **utuh** dan panjangnya minimal 8 huruf; gabungan dua-tiga kata dicocokkan
+   sebagai potongan supaya "Medco Energi" tetap kena pada penulisan media
+   "MedcoEnergi".
+3. **Nama pendek yang lazim di media** (`ALIAS` di
+   [news.py](idx_screener/news.py)): BRI, BCA, Antam, Telkom, dan seterusnya.
+
+Syarat "kata tunggal minimal 8 huruf dan tidak umum" itu bukan kehati-hatian
+berlebihan. Tanpa itu, "Perusahaan Gas Negara" tersangkut di tiap berita yang
+memuat kata *perusahaan*, "Asuransi Bina Dana Arta" di tiap berita asuransi,
+dan "Bayan Resources" di tiap berita yang menyebut *resources*. Ketiganya
+benar-benar terjadi pada percobaan pertama.
+
+### Ini bukan rekomendasi
+
+Preset di `presets/*.yaml` diuji ke dua tahun data. Pencocokan berita **tidak
+diuji sama sekali** - tidak ada bukti bahwa saham yang disebut berita semalam
+bergerak lebih baik. Karena itu pesannya menyebut dirinya daftar sebutan, dan
+yang diberi tekanan justru irisannya: emiten bertanda `← lolos lonjakan`
+adalah yang disebut berita **sekaligus** memenuhi saringan yang terukur.
+Sisanya informasi, bukan sinyal.
+
+Perlu juga disadari jendela semalam sering sepi. Pada uji pertama, 18 berita
+dalam rentang 15.00-08.00 hanya menghasilkan satu emiten - sisanya berita
+makro dan regulasi yang tidak menyebut perusahaan mana pun.
+
 ### Penjadwalan
 
 [.github/workflows/lonjakan-harian.yml](.github/workflows/lonjakan-harian.yml)
@@ -578,11 +627,12 @@ idx_screener/
 ├── backtest.py         uji historis + penjaga look-ahead bias
 ├── report.py           tabel terminal, format angka Indonesia, ekspor
 ├── notify.py           perangkaian pesan & pengiriman (Telegram, WhatsApp)
+├── news.py             ambil berita RSS & cocokkan judulnya ke emiten
 ├── cache.py            cache SQLite untuk harga dan fundamental
 ├── universe.py         daftar emiten
 └── providers/yahoo.py  pengambilan data (massal + rinci) & penyeragaman satuan
 app.py                  antarmuka web Streamlit
-tests/                  136 test, seluruhnya memakai data sintetis
+tests/                  155 test, seluruhnya memakai data sintetis
 ```
 
 Menambah sumber data lain cukup menyediakan kelas dengan dua metode,
@@ -592,7 +642,7 @@ Menambah sumber data lain cukup menyediakan kelas dengan dua metode,
 ## Test
 
 ```bash
-make test        # 136 test, < 1 detik, tanpa jaringan
+make test        # 155 test, < 1 detik, tanpa jaringan
 ```
 
 ## Batasan data

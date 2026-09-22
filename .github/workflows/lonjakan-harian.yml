@@ -14,7 +14,7 @@ name: Lonjakan harian
 
 on:
   schedule:
-    - cron: "30 1 * * 1-5"   # 08:30 WIB - sebelum bursa buka, data penutupan kemarin
+    - cron: "30 1 * * 1-5"   # 08:30 WIB - penutupan kemarin + berita semalam
     - cron: "0 8 * * 1-5"    # 15:00 WIB - sesi II masih berjalan, angka belum final
   workflow_dispatch:
     inputs:
@@ -61,4 +61,5 @@ jobs:
             --top 15 \
             --max-stale-days 5 \
             --refresh \
+            ${{ (github.event_name != 'schedule' || github.event.schedule == '30 1 * * 1-5') && '--news' || '' }} \
             ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}

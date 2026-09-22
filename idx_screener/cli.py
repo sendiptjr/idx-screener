@@ -14,6 +14,7 @@ from .backtest import LookAheadError, backtest as run_backtest
 from .cache import Cache
 from .config import HISTORY_PERIOD, UNIVERSE_CSV
 from .metrics import FIELD_DOCS
+from .news import ambil_berita, cocokkan, format_berita, jendela_semalam
 from .notify import (
     NotifyError,
     TelegramConfig,
@@ -169,6 +170,9 @@ def notify(
     max_stale_days: int = typer.Option(5, "--max-stale-days", help="Batalkan bila data bursa lebih tua dari ini (0 = abaikan)."),
     skip_empty: bool = typer.Option(False, "--skip-empty", help="Jangan kirim apa pun bila tidak ada yang lolos."),
     tp_sl: bool = typer.Option(False, "--tp-sl/--no-tp-sl", help="Sertakan acuan TP/SL berbasis ATR."),
+    news: bool = typer.Option(False, "--news", help="Kirim juga daftar emiten yang disebut berita semalam."),
+    news_dari: int = typer.Option(15, "--news-dari", help="Jam mulai jendela berita (hari bursa sebelumnya)."),
+    news_sampai: int = typer.Option(8, "--news-sampai", help="Jam akhir jendela berita (hari ini)."),
     tickers: Optional[str] = typer.Option(None, "--tickers", "-t"),
     universe_file: Optional[str] = typer.Option(None, "--universe", "-u"),
     max_deep: int = typer.Option(400, "--max-deep"),
@@ -214,6 +218,7 @@ def notify(
         raise typer.Exit(0)
 
     gagal = 0
+    lolos_per_ticker: dict[str, list[str]] = {}
     for chosen in terpilih:
         try:
             result = screener.run(preset=chosen, snapshot=snapshot, max_deep=max_deep,
@@ -222,6 +227,9 @@ def notify(
             console.print(f"[red]Filter '{chosen.name}' bermasalah:[/red] {exc}")
             gagal += 1
             continue
+
+        for kode in result.matched.get("ticker", []):
+            lolos_per_ticker.setdefault(str(kode), []).append(chosen.name)
 
         if result.matched.empty and skip_empty:
             console.print(f"[yellow]{chosen.name}: tidak ada yang lolos, tidak dikirim.[/yellow]")
@@ -276,6 +284,38 @@ def notify(
 
         console.print(f"[green]Terkirim[/green] ke {tujuan} - {chosen.name}: "
                       f"{len(result.matched)} saham, data {tanggal_id(tanggal)}. id={pesan_id}")
+
+    if news:
+        mulai, selesai = jendela_semalam(jam_mulai=news_dari, jam_selesai=news_sampai)
+        console.print(f"[dim]Mengambil berita {mulai:%d/%m %H.%M} - {selesai:%d/%m %H.%M} WIB...[/dim]")
+        try:
+            berita = ambil_berita(mulai, selesai)
+            sebutan = cocokkan(berita, screener.universe)
+        except Exception as exc:
+            console.print(f"[red]Gagal mengambil berita:[/red] {exc}")
+            berita, sebutan, gagal = [], [], gagal + 1
+
+        if sebutan or berita:
+            teks_berita = format_berita(
+                sebutan, mulai=mulai, selesai=selesai, jumlah_berita=len(berita),
+                snapshot=snapshot, lolos_saringan=lolos_per_ticker, top=top,
+            )
+            if dry_run:
+                console.print(Panel(teks_berita, title=f"berita -> {channel}", border_style="cyan"))
+            else:
+                try:
+                    if channel == "telegram":
+                        hasil = send_telegram(TelegramConfig.from_env(to), teks_berita)
+                        pesan_id = hasil.get("message_id", "-")
+                    else:
+                        config = WhatsAppConfig.from_env(to)
+                        _, response = send(config, text=teks_berita, params=[], mode="text")
+                        pesan_id = (response.get("messages") or [{}])[0].get("id", "-")
+                    console.print(f"[green]Terkirim[/green] - berita: {len(sebutan)} emiten "
+                                  f"dari {len(berita)} berita. id={pesan_id}")
+                except NotifyError as exc:
+                    console.print(f"[red]Gagal mengirim berita:[/red] {exc}")
+                    gagal += 1
 
     if dry_run:
         console.print("[dim]--dry-run: tidak ada yang dikirim.[/dim]")
