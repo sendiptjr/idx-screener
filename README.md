@@ -14,7 +14,7 @@ idxscreen screen --preset value --funnel
 - 845 emiten - seluruh saham IDX yang dikenali Yahoo, diperbarui otomatis
 - 78 metrik: valuasi, profitabilitas, likuiditas, indikator teknikal, return, volatilitas
 - Bahasa filter sederhana: `per < 12 and roe > 15 and close > sma200`
-- 11 preset strategi siap pakai (value, growth, dividen, momentum, breakout, …)
+- 13 preset strategi siap pakai (value, growth, dividen, momentum, breakout, …)
 - Skor peringkat gabungan berbobot
 - Backtest berbasis harga dengan penolakan otomatis terhadap look-ahead bias
 - Antarmuka web Streamlit dengan grafik candlestick, volume, dan RSI
@@ -209,6 +209,36 @@ sort: { by: pbv, ascending: true }
 limit: 20
 columns: [ticker, name, close, pbv, per, roe, dividend_yield]
 ```
+
+### Penguat harian
+
+`top-gainer` dan `top-gainer-likuid` menjawab pertanyaan berbeda dari preset
+lain: bukan "apa yang layak dibeli", melainkan "apa yang bergerak hari ini".
+
+```bash
+idxscreen screen --preset top-gainer-likuid --refresh
+```
+
+Keduanya **tidak punya pengukuran di belakangnya** - sekadar pengurutan
+menurut kenaikan harga. `top-gainer` tanpa saringan sama sekali;
+`top-gainer-likuid` membatasi ke nilai transaksi di atas Rp 1 miliar sehari,
+jauh lebih longgar daripada Rp 10 miliar milik preset `lonjakan`, sehingga
+angka keunggulan backtest tidak berlaku.
+
+Kolom `avg_value_20` dan `dist_ara` sengaja ditampilkan, karena dua angka itu
+yang menerangkan daftarnya. Contoh nyata pada 22 September 2026:
+
+| Kode | % Hari | Nilai/hari | Sisa ARA |
+|---|---|---|---|
+| FORU | +34,09% | Rp 18,05 M | 0,91% |
+| NASI | +24,79% | Rp 3,50 M | 0,21% |
+| SAPX | +24,50% | Rp 4,05 M | 0,50% |
+
+Ketiganya praktis terkunci ARA - tidak bisa dibeli di harga itu. Dibandingkan
+dengan daftar penguat di aplikasi broker pada waktu yang sama, sebelas dari
+tiga belas nama teratas cocok, beberapa persis sampai ke rupiah; selisihnya
+hanya beberapa tick pada emiten tipis karena dua potret diambil pada detik
+yang berbeda.
 
 ### Catatan soal preset lonjakan
 

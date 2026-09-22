@@ -1,0 +1,16 @@
+name: top-gainer-likuid
+title: Penguat harian yang bisa dibeli
+description: >
+  Sama seperti `top-gainer`, tetapi dibatasi emiten bernilai transaksi di atas
+  Rp 1 miliar sehari - cukup untuk masuk dan keluar dalam ukuran ritel tanpa
+  menggerakkan harganya sendiri.
+note: >
+  Ambang Rp 1 miliar jauh lebih longgar daripada Rp 10 miliar yang dipakai
+  preset `lonjakan`, jadi angka keunggulan dari backtest TIDAK berlaku di
+  sini. Ini penyaringan agar daftarnya masuk akal, bukan strategi teruji.
+filters:
+  - change_pct > 0
+  - avg_value_20 > 1e9
+sort: { by: change_pct, ascending: false }
+limit: 20
+columns: [ticker, name, sector, close, change_pct, avg_value_20, volume_ratio, dist_ara]

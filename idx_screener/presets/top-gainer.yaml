@@ -1,0 +1,18 @@
+name: top-gainer
+title: Penguat harian
+description: >
+  Kenaikan harga terbesar hari ini, tanpa saringan apa pun selain harga
+  bergerak naik. Ini potret pasar, bukan strategi: daftarnya memang dipenuhi
+  emiten bertransaksi tipis, dan kolom nilai/hari sengaja ditampilkan supaya
+  ketipisan itu terlihat.
+note: >
+  Tidak ada pengukuran di belakang daftar ini. Kenaikan pada emiten bernilai
+  transaksi ratusan juta rupiah sehari sering hanya beberapa lot berpindah
+  tangan - terlihat di layar, tetapi tidak bisa dimasuki atau ditinggalkan
+  dalam ukuran berarti. Untuk lonjakan yang memang terukur, pakai preset
+  `lonjakan`.
+filters:
+  - change_pct > 0
+sort: { by: change_pct, ascending: false }
+limit: 20
+columns: [ticker, name, sector, close, change_pct, avg_value_20, volume_ratio, dist_ara]
