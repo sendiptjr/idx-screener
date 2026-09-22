@@ -255,6 +255,7 @@ idxscreen notify --preset lonjakan --top 15
 | `--skip-empty` | diam saja bila tidak ada yang lolos |
 | `--tp-sl` | sertakan acuan TP/SL berbasis ATR (bawaan mati) |
 | `--news` | kirim juga emiten yang disebut berita semalam |
+| `--news-ai` | nalar dampak berita umum lewat Claude (bawaan nyala) |
 | `--refresh` | abaikan cache, ambil ulang dari Yahoo |
 
 Telegram jauh lebih sederhana dan disarankan untuk pemakaian pribadi:
@@ -518,6 +519,63 @@ Perlu juga disadari jendela semalam sering sepi. Pada uji pertama, 18 berita
 dalam rentang 15.00-08.00 hanya menghasilkan satu emiten - sisanya berita
 makro dan regulasi yang tidak menyebut perusahaan mana pun.
 
+## Dampak berita, ditalar Claude
+
+Pencocokan nama hanya menangkap berita yang menyebut emiten. Peristiwa seperti
+gunung meletus, banjir besar, atau kebijakan mendadak tidak menyebut satu kode
+pun, padahal dampaknya nyata. Untuk itu judul-judul berita dikirim ke Claude,
+yang menyimpulkan rantai sebabnya dan emiten yang mungkin terkena.
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+idxscreen notify --news --dry-run
+```
+
+Contoh bentuk hasilnya:
+
+```
+*Dampak berita semalam*
+
+1. ▲ Erupsi Krakatau, abu vulkanik menyebar  _(sedang)_
+    Abu memicu gangguan pernapasan sehingga permintaan obat dan layanan
+    rumah sakit naik
+    • KLBF Rp 1.500 · 2,50%
+      Produsen obat pernapasan
+    • MIKA Rp 2.900 · 0,70% ← lolos lonjakan
+      Jaringan rumah sakit di Banten
+```
+
+Tanpa `ANTHROPIC_API_KEY`, bagian ini dilewati dengan pesan di log dan tiga
+pesan lainnya tetap terkirim - bukan kegagalan.
+
+### Model dan ongkos
+
+Bawaannya `claude-haiku-4-5`: sekali sehari atas ~50 judul, ongkosnya sekitar
+seperseratus sen per panggilan. Untuk penalaran dampak lapis kedua yang lebih
+tajam, setel `ANTHROPIC_MODEL=claude-opus-5` - kira-kira sepuluh kali lebih
+mahal dan tetap di bawah Rp 20.000 sebulan.
+
+Daftar 845 emiten dikirim di bagian sistem dengan `cache_control`, jadi
+posisinya stabil dan bisa dipakai ulang cache bila dipanggil berulang.
+
+### Pengamannya
+
+- **Kode karangan dibuang.** Claude kadang menyebut kode yang tidak ada;
+  apa pun yang tidak ada di daftar emiten disaring sebelum masuk pesan.
+- **Tema tanpa emiten sah ikut dibuang**, supaya tidak ada baris kosong.
+- **Paling banyak 5 tema, 4 emiten per tema**, agar pesannya tetap terbaca.
+
+### Ini hipotesis, bukan sinyal
+
+Preset diuji ke dua tahun data. Penalaran ini **tidak diuji sama sekali** -
+tidak ada bukti bahwa saham yang disebut bergerak sesuai dugaan. Rantai sebab
+yang masuk akal di atas kertas sering sudah habis diperdagangkan dalam hitungan
+menit, atau tidak pernah terwujud. Karena itu tiap tema membawa nilai keyakinan
+yang diisi Claude sendiri, dan pesannya menutup dengan peringatan eksplisit.
+
+Yang tetap bisa dipegang adalah irisannya: emiten bertanda `← lolos` muncul di
+penalaran berita **sekaligus** memenuhi saringan yang memang terukur.
+
 ### Penjadwalan
 
 [.github/workflows/lonjakan-harian.yml](.github/workflows/lonjakan-harian.yml)
@@ -628,11 +686,12 @@ idx_screener/
 ├── report.py           tabel terminal, format angka Indonesia, ekspor
 ├── notify.py           perangkaian pesan & pengiriman (Telegram, WhatsApp)
 ├── news.py             ambil berita RSS & cocokkan judulnya ke emiten
+├── analisis.py         nalar dampak berita umum lewat Claude
 ├── cache.py            cache SQLite untuk harga dan fundamental
 ├── universe.py         daftar emiten
 └── providers/yahoo.py  pengambilan data (massal + rinci) & penyeragaman satuan
 app.py                  antarmuka web Streamlit
-tests/                  155 test, seluruhnya memakai data sintetis
+tests/                  172 test, seluruhnya memakai data sintetis
 ```
 
 Menambah sumber data lain cukup menyediakan kelas dengan dua metode,
@@ -642,7 +701,7 @@ Menambah sumber data lain cukup menyediakan kelas dengan dua metode,
 ## Test
 
 ```bash
-make test        # 155 test, < 1 detik, tanpa jaringan
+make test        # 172 test, < 1 detik, tanpa jaringan
 ```
 
 ## Batasan data

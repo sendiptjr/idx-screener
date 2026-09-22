@@ -14,6 +14,7 @@ from .backtest import LookAheadError, backtest as run_backtest
 from .cache import Cache
 from .config import HISTORY_PERIOD, UNIVERSE_CSV
 from .metrics import FIELD_DOCS
+from .analisis import AnalisisError, analisis_berita, format_tema
 from .news import ambil_berita, cocokkan, format_berita, jendela_semalam
 from .notify import (
     NotifyError,
@@ -173,6 +174,8 @@ def notify(
     news: bool = typer.Option(False, "--news", help="Kirim juga daftar emiten yang disebut berita semalam."),
     news_dari: int = typer.Option(15, "--news-dari", help="Jam mulai jendela berita (hari bursa sebelumnya)."),
     news_sampai: int = typer.Option(8, "--news-sampai", help="Jam akhir jendela berita (hari ini)."),
+    news_ai: bool = typer.Option(True, "--news-ai/--no-news-ai",
+                                 help="Nalar dampak berita umum lewat Claude (butuh ANTHROPIC_API_KEY)."),
     tickers: Optional[str] = typer.Option(None, "--tickers", "-t"),
     universe_file: Optional[str] = typer.Option(None, "--universe", "-u"),
     max_deep: int = typer.Option(400, "--max-deep"),
@@ -316,6 +319,36 @@ def notify(
                 except NotifyError as exc:
                     console.print(f"[red]Gagal mengirim berita:[/red] {exc}")
                     gagal += 1
+
+        # Lapis kedua: berita umum yang tidak menyebut emiten mana pun, tetapi
+        # dampaknya bisa ditalar - erupsi, banjir, kebijakan mendadak.
+        if news_ai and berita:
+            try:
+                tema = analisis_berita(berita, screener.universe)
+            except AnalisisError as exc:
+                console.print(f"[yellow]Analisis dampak dilewati:[/yellow] {exc}")
+                tema = None
+
+            if tema is not None:
+                teks_tema = format_tema(tema, snapshot=snapshot,
+                                        lolos_saringan=lolos_per_ticker)
+                if dry_run:
+                    console.print(Panel(teks_tema, title=f"dampak -> {channel}",
+                                        border_style="cyan"))
+                else:
+                    try:
+                        if channel == "telegram":
+                            hasil = send_telegram(TelegramConfig.from_env(to), teks_tema)
+                            pesan_id = hasil.get("message_id", "-")
+                        else:
+                            config = WhatsAppConfig.from_env(to)
+                            _, response = send(config, text=teks_tema, params=[], mode="text")
+                            pesan_id = (response.get("messages") or [{}])[0].get("id", "-")
+                        console.print(f"[green]Terkirim[/green] - dampak: {len(tema)} tema. "
+                                      f"id={pesan_id}")
+                    except NotifyError as exc:
+                        console.print(f"[red]Gagal mengirim dampak:[/red] {exc}")
+                        gagal += 1
 
     if dry_run:
         console.print("[dim]--dry-run: tidak ada yang dikirim.[/dim]")
