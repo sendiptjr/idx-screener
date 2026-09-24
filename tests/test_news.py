@@ -117,6 +117,16 @@ def test_html_yang_di_escape_dibersihkan():
     assert b.waktu == pd.Timestamp("2026-09-21 17:05", tz="Asia/Jakarta")
 
 
+def test_nama_media_dan_klaster_google_tidak_ikut_dicocokkan(monkeypatch, universe):
+    xml = """<item><title>Riset Makanan Cegah Penyakit Jantung - Medco News</title>
+<pubDate>Mon, 21 Sep 2026 10:05:00 GMT</pubDate>
+<description>&lt;a&gt;Saham BBRI Naik&lt;/a&gt; Kontan</description></item>"""
+    monkeypatch.setattr(news.requests, "get", lambda url, **_: _Balasan(200, xml))
+    [b] = ambil_berita(MULAI, SELESAI, sumber=(("G", "https://news.google.com/rss"),))
+    assert (b.judul, b.sumber, b.ringkasan) == ("Riset Makanan Cegah Penyakit Jantung", "Medco News", "")
+    assert cocokkan([b], universe) == []
+
+
 def test_semua_sumber_gagal_bukan_daftar_kosong(monkeypatch):
     # Kosong karena diblokir harus bisa dibedakan dari malam yang sepi berita.
     monkeypatch.setattr(news.requests, "get", lambda url, **_: _Balasan(403))

@@ -160,6 +160,19 @@ def urai_rss(xml: str, sumber: str) -> list[Berita]:
     return hasil
 
 
+def _rapikan_google(b: Berita) -> Berita:
+    """Judul Google News berakhiran " - Nama Media", dan <description>-nya
+    bukan ringkasan melainkan judul-judul lain dari klaster yang sama. Keduanya
+    menyeret pencocokan ke emiten yang tidak diberitakan - "VIVA.co.id" jadi
+    VIVA, judul tetangga di klaster jadi emiten lain. Nama media dipindah ke
+    `sumber`, ringkasannya dibuang."""
+    judul, pemisah, media = b.judul.rpartition(" - ")
+    if pemisah and judul:
+        b.judul, b.sumber = judul, media
+    b.ringkasan = ""
+    return b
+
+
 def ambil_berita(
     mulai: pd.Timestamp,
     selesai: pd.Timestamp,
@@ -192,6 +205,8 @@ def ambil_berita(
             continue
         berhasil += 1
         diurai = urai_rss(response.text, nama)
+        if "news.google.com" in url:
+            diurai = [_rapikan_google(b) for b in diurai]
         di_sini = sum(mulai <= b.waktu <= selesai for b in diurai)
         laporan.append(f"{nama}: {len(diurai)} berita, {di_sini} di jendela")
         semua += diurai
