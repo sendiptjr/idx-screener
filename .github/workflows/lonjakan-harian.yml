@@ -7,19 +7,26 @@
 # WIB = UTC+7 dan tidak pernah berganti tanggal pada jam-jam ini, jadi hari
 # cron-nya sama persis dengan hari WIB: 1-5 = Senin-Jumat.
 #
-# Cron GitHub sering telat 5-15 menit saat antrean padat; kalau ketepatan
-# waktu penting - dan untuk kiriman 15:00 itu lebih terasa karena bursa tutup
-# sekitar 15.50 - pindahkan ke cron di VPS sendiri.
+# Cron GitHub di repo ini terbukti telat 4,5-7 jam (September 2026: kiriman
+# 08:30 tiba 13.07-13.34, kiriman 15:00 tiba 20.03-21.48). Supaya tepat
+# waktu, picu lewat API workflow_dispatch dari penjadwal luar (cron-job.org
+# atau cron VPS) - dispatch langsung jalan tanpa antre. Lihat README bagian
+# "Kirim tepat waktu". Jadwal di bawah hanya cadangan; hapus setelah pemicu
+# luar berjalan, agar pesan tidak terkirim dua kali.
 name: Lonjakan harian
 
 on:
   schedule:
-    - cron: "30 1 * * 1-5"   # 08:30 WIB - penutupan kemarin + berita semalam
+    - cron: "0 1 * * 1-5"    # 08:00 WIB - penutupan kemarin + berita semalam
     - cron: "0 8 * * 1-5"    # 15:00 WIB - sesi II masih berjalan, angka belum final
   workflow_dispatch:
     inputs:
       dry_run:
         description: "Hanya cetak pesannya, jangan kirim"
+        type: boolean
+        default: true
+      berita:
+        description: "Sertakan berita semalam dan dampaknya (kiriman pagi)"
         type: boolean
         default: true
 
@@ -63,5 +70,5 @@ jobs:
             --top 15 \
             --max-stale-days 5 \
             --refresh \
-            ${{ (github.event_name != 'schedule' || github.event.schedule == '30 1 * * 1-5') && '--news' || '' }} \
+            ${{ (github.event.schedule == '0 1 * * 1-5' || (github.event_name == 'workflow_dispatch' && inputs.berita)) && '--news' || '' }} \
             ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}

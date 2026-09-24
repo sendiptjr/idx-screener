@@ -618,7 +618,7 @@ menjalankannya dua kali tiap hari bursa:
 
 | Cron (UTC) | WIB | Keadaan bursa | Isi pesan |
 |---|---|---|---|
-| `30 1 * * 1-5` | 08:30 | belum buka (sesi I mulai 09:00) | penutupan resmi hari bursa sebelumnya |
+| `0 1 * * 1-5` | 08:00 | belum buka (sesi I mulai 09:00) | penutupan resmi hari bursa sebelumnya, berita semalam |
 | `0 8 * * 1-5` | 15:00 | sesi II berjalan, tutup ~15.50 | harga berjalan, **belum final** |
 
 WIB = UTC+7 dan tidak berganti tanggal pada jam-jam ini, jadi hari cron-nya
@@ -633,24 +633,66 @@ Pasang secret sesuai kanal yang dipakai - `TELEGRAM_TOKEN` + `TELEGRAM_CHAT_ID`,
 atau `WA_TOKEN` + `WA_PHONE_NUMBER_ID` + `WA_TO` + `WA_TEMPLATE`. Cukup salah
 satu set. Lalu uji sekali lewat tombol *Run workflow* dengan `dry_run` menyala.
 
-Cron GitHub tidak dijamin tepat waktu - meleset 5-15 menit itu biasa. Untuk
-kiriman 15:00 keterlambatan lebih terasa karena bursa tutup sekitar 15.50.
-Kalau jamnya harus pas, jalankan dari cron di VPS sendiri:
+### Kirim tepat waktu
+
+Cron GitHub tidak bisa diandalkan untuk jam yang pas. Di repo ini, pada
+September 2026, kiriman 08:30 tiba pukul 13.07-13.34 dan kiriman 15:00 tiba
+pukul 20.03-21.48 WIB - telat 4,5 sampai 7 jam, bukan beberapa menit.
+
+Pemicu `workflow_dispatch` lewat API tidak ikut antrean itu dan langsung
+jalan. Jadi picu dari penjadwal luar, misalnya [cron-job.org](https://cron-job.org)
+(gratis) atau cron di VPS:
+
+1. Buat *fine-grained personal access token* di GitHub: hanya repo ini,
+   izin **Actions: Read and write**.
+2. Buat dua jadwal, zona waktu Asia/Jakarta, Senin-Jumat:
+
+   | Jam WIB | Body |
+   |---|---|
+   | 08:00 | `{"ref":"main","inputs":{"dry_run":"false","berita":"true"}}` |
+   | 15:00 | `{"ref":"main","inputs":{"dry_run":"false","berita":"false"}}` |
+
+   Keduanya `POST` ke
+   `https://api.github.com/repos/sendiptjr/idx-screener/actions/workflows/lonjakan-harian.yml/dispatches`
+   dengan header:
+
+   ```
+   Authorization: Bearer <token>
+   Accept: application/vnd.github+json
+   ```
+
+   Setara dengan:
+
+   ```bash
+   curl -X POST -H "Authorization: Bearer $GH_TOKEN" \
+     -H "Accept: application/vnd.github+json" \
+     https://api.github.com/repos/sendiptjr/idx-screener/actions/workflows/lonjakan-harian.yml/dispatches \
+     -d '{"ref":"main","inputs":{"dry_run":"false","berita":"true"}}'
+   ```
+
+   Balasan yang benar `204 No Content`.
+3. Setelah kedua pemicu terbukti jalan, hapus blok `schedule:` di workflow.
+   Kalau tidak, tiap pesan terkirim dua kali: sekali tepat waktu, sekali lagi
+   beberapa jam kemudian.
+
+Alternatifnya, lewati GitHub sama sekali dan jalankan dari cron VPS. CNBC
+membalas 403 ke runner GitHub; dari VPS mungkin lolos, mungkin tidak -
+lihat baris status sumber di log:
 
 ```cron
-30 8 * * 1-5 cd /srv/idx-screener && .venv/bin/idxscreen notify --preset lonjakan --refresh
- 0 15 * * 1-5 cd /srv/idx-screener && .venv/bin/idxscreen notify --preset lonjakan --refresh
+ 0 8 * * 1-5 cd /srv/idx-screener && .venv/bin/idxscreen notify --preset lonjakan,volume-spike --tp-sl --top 15 --refresh --news
+ 0 15 * * 1-5 cd /srv/idx-screener && .venv/bin/idxscreen notify --preset lonjakan,volume-spike --tp-sl --top 15 --refresh
 ```
 
 `--refresh` di situ bukan hiasan. Cache harga berumur 6 jam
-([config.py](idx_screener/config.py)), sedangkan jarak 08:30 ke 15:00 hanya
-6,5 jam. Begitu jadwal pagi telat sedikit saja, cache masih dianggap segar dan
+([config.py](idx_screener/config.py)), sedangkan jarak 08:00 ke 15:00 hanya
+7 jam. Begitu jadwal pagi telat sedikit saja, cache masih dianggap segar dan
 kiriman sore akan **mengulang data pagi tanpa memberi tanda apa pun**. Memaksa
 ambil ulang menutup lubang itu.
 
 ### Yang perlu disadari soal jamnya
 
-Kiriman 08:30 memakai penutupan resmi kemarin - berguna sebagai bahan
+Kiriman 08:00 memakai penutupan resmi kemarin - berguna sebagai bahan
 persiapan sebelum bursa buka, tapi bukan harga yang dipakai preset `lonjakan`
 saat diukur: pengukurannya mengandaikan pembelian di harga penutupan pada hari
 lonjakan itu sendiri.
