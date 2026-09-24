@@ -102,6 +102,21 @@ def test_status_tiap_sumber_dilaporkan(monkeypatch):
     assert laporan == ["A: 2 berita, 1 di jendela", "B: HTTP 404"]
 
 
+def test_berita_ganda_antarsumber_dibuang(monkeypatch):
+    monkeypatch.setattr(news.requests, "get", lambda url, **_: _Balasan(200, RSS))
+    hasil = ambil_berita(MULAI, SELESAI, sumber=DUA_SUMBER)
+    assert len(hasil) == 1
+
+
+def test_html_yang_di_escape_dibersihkan():
+    xml = """<item><title>Saham A &amp; B</title><pubDate>Mon, 21 Sep 2026 10:05:00 GMT</pubDate>
+<description>&lt;a href="https://x"&gt;Judul&lt;/a&gt;&amp;nbsp;&lt;font&gt;detik&lt;/font&gt;</description></item>"""
+    [b] = urai_rss(xml, "uji")
+    assert b.judul == "Saham A & B"
+    assert b.ringkasan == "Judul detik"
+    assert b.waktu == pd.Timestamp("2026-09-21 17:05", tz="Asia/Jakarta")
+
+
 def test_semua_sumber_gagal_bukan_daftar_kosong(monkeypatch):
     # Kosong karena diblokir harus bisa dibedakan dari malam yang sepi berita.
     monkeypatch.setattr(news.requests, "get", lambda url, **_: _Balasan(403))

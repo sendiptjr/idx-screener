@@ -516,7 +516,10 @@ kemarin: dijalankan Senin pagi jendelanya mundur sampai Jumat sore, supaya
 berita akhir pekan tidak hilang.
 
 Sumbernya RSS pasar CNBC Indonesia (feed investment-nya membalas 404 sejak
-September 2026). Kontan dan Bisnis.com membalas 403 untuk permintaan otomatis,
+September 2026) dan Google News: empat kueri pasar (`saham`, `emiten`, `IHSG`,
+`bursa OR tbk`) ditambah feed utama dan bisnis untuk berita umum. CNBC membalas
+403 ke IP datacenter, jadi di GitHub Actions praktis hanya Google News yang
+terpakai. Kontan dan Bisnis.com membalas 403 untuk permintaan otomatis,
 jadi tidak dipakai. Status tiap sumber tercetak di log; bila semua sumber
 gagal, `notify` keluar dengan kode 1 agar run-nya terlihat merah.
 

@@ -13,6 +13,8 @@ irisannya dengan saringan yang memang terukur.
 from __future__ import annotations
 
 import email.utils
+import html
+import math
 import re
 from dataclasses import dataclass, field
 
@@ -24,8 +26,22 @@ from .universe import Emiten
 # Hanya sumber yang benar-benar melayani permintaan otomatis. Kontan dan
 # Bisnis.com membalas 403, jadi tidak disertakan. Feed investment CNBC
 # membalas 404 sejak September 2026.
+#
+# CNBC juga membalas 403 ke IP datacenter, termasuk runner GitHub Actions, jadi
+# Google News dipakai sebagai sumber kedua. Satu kueri dibatasi 100 item dan
+# diurutkan menurut relevansi, bukan waktu - karena itu beberapa kueri sempit
+# digabung alih-alih satu kueri lebar. Feed utama dan bisnis membawa berita
+# umum yang tidak menyebut emiten, bahan untuk `analisis.py`. {hari} diisi
+# dari panjang jendela, supaya Senin pagi tetap menjangkau Jumat sore.
+_GOOGLE = "https://news.google.com/rss{jalur}?{kueri}hl=id&gl=ID&ceid=ID:id"
 SUMBER_RSS = (
     ("CNBC Indonesia", "https://www.cnbcindonesia.com/market/rss"),
+    *(
+        (f"Google News '{q}'", _GOOGLE.format(jalur="/search", kueri=f"q={q}+when:{{hari}}d&"))
+        for q in ("saham", "emiten", "IHSG", "bursa+OR+tbk")
+    ),
+    ("Google News utama", _GOOGLE.format(jalur="", kueri="")),
+    ("Google News bisnis", _GOOGLE.format(jalur="/headlines/section/topic/BUSINESS", kueri="")),
 )
 
 ZONA = "Asia/Jakarta"
@@ -115,7 +131,9 @@ def _isi_tag(tag: str, blok: str) -> str:
     m = re.search(rf"<{tag}[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</{tag}>", blok, re.S)
     if not m:
         return ""
-    teks = re.sub(r"<[^>]+>", " ", m.group(1))
+    # Google News menaruh HTML yang di-escape di <description>, bukan CDATA,
+    # dan entitas di dalamnya di-escape sekali lagi (&amp;nbsp;).
+    teks = html.unescape(re.sub(r"<[^>]+>", " ", html.unescape(m.group(1))))
     return re.sub(r"\s+", " ", teks).strip()
 
 
@@ -157,12 +175,13 @@ def ambil_berita(
     sumber mati tidak boleh terlihat sama dengan malam yang sepi berita.
     """
     laporan = laporan if laporan is not None else []
+    hari = max(1, math.ceil((pd.Timestamp.now(tz=mulai.tz) - mulai) / pd.Timedelta(days=1)))
     semua: list[Berita] = []
     berhasil = 0
     for nama, url in sumber:
         try:
             response = requests.get(
-                url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"}
+                url.replace("{hari}", str(hari)), timeout=timeout, headers={"User-Agent": "Mozilla/5.0"}
             )
         except requests.RequestException as exc:
             # Satu sumber mati tidak boleh menggugurkan sisanya.
@@ -178,7 +197,14 @@ def ambil_berita(
         semua += diurai
     if not berhasil:
         raise BeritaError("tidak ada sumber yang bisa diambil - " + "; ".join(laporan))
-    di_jendela = [b for b in semua if mulai <= b.waktu <= selesai]
+    # Satu berita bisa muncul di beberapa kueri; yang pertama dipertahankan.
+    terlihat: set[str] = set()
+    di_jendela = []
+    for b in semua:
+        kunci = _normal(b.judul)
+        if mulai <= b.waktu <= selesai and kunci not in terlihat:
+            terlihat.add(kunci)
+            di_jendela.append(b)
     di_jendela.sort(key=lambda b: b.waktu, reverse=True)
     return di_jendela
 
