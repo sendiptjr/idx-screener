@@ -291,12 +291,19 @@ def notify(
     if news:
         mulai, selesai = jendela_semalam(jam_mulai=news_dari, jam_selesai=news_sampai)
         console.print(f"[dim]Mengambil berita {mulai:%d/%m %H.%M} - {selesai:%d/%m %H.%M} WIB...[/dim]")
+        laporan: list[str] = []
         try:
-            berita = ambil_berita(mulai, selesai)
+            berita = ambil_berita(mulai, selesai, laporan=laporan)
             sebutan = cocokkan(berita, screener.universe)
         except Exception as exc:
             console.print(f"[red]Gagal mengambil berita:[/red] {exc}")
             berita, sebutan, gagal = [], [], gagal + 1
+        else:
+            for baris in laporan:
+                console.print(f"[dim]  {baris}[/dim]")
+            if not berita:
+                console.print("[yellow]Tidak ada berita di jendela; pesan berita "
+                              "dan dampak dilewati.[/yellow]")
 
         if sebutan or berita:
             teks_berita = format_berita(

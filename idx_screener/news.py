@@ -22,10 +22,10 @@ import requests
 from .universe import Emiten
 
 # Hanya sumber yang benar-benar melayani permintaan otomatis. Kontan dan
-# Bisnis.com membalas 403, jadi tidak disertakan.
+# Bisnis.com membalas 403, jadi tidak disertakan. Feed investment CNBC
+# membalas 404 sejak September 2026.
 SUMBER_RSS = (
     ("CNBC Indonesia", "https://www.cnbcindonesia.com/market/rss"),
-    ("CNBC Investment", "https://www.cnbcindonesia.com/investment/rss"),
 )
 
 ZONA = "Asia/Jakarta"
@@ -57,6 +57,10 @@ TERLALU_UMUM = {
     "pratama", "lestari", "manufaktur", "perkasa", "sarana", "solusi",
     "nasional", "pacific", "pasifik", "raya", "central", "capital",
 }
+
+
+class BeritaError(RuntimeError):
+    """Tidak satu pun sumber RSS bisa diambil."""
 
 
 @dataclass
@@ -144,19 +148,36 @@ def ambil_berita(
     *,
     sumber=SUMBER_RSS,
     timeout: float = 20.0,
+    laporan: list[str] | None = None,
 ) -> list[Berita]:
-    """Berita dari semua sumber yang jatuh di dalam jendela, terbaru dulu."""
+    """Berita dari semua sumber yang jatuh di dalam jendela, terbaru dulu.
+
+    Status tiap sumber ditambahkan ke `laporan` bila diberikan. Bila tidak satu
+    pun sumber berhasil, BeritaError dilempar - daftar kosong karena semua
+    sumber mati tidak boleh terlihat sama dengan malam yang sepi berita.
+    """
+    laporan = laporan if laporan is not None else []
     semua: list[Berita] = []
+    berhasil = 0
     for nama, url in sumber:
         try:
             response = requests.get(
                 url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"}
             )
-            if response.status_code != 200:
-                continue
-            semua += urai_rss(response.text, nama)
-        except requests.RequestException:
-            continue      # satu sumber mati tidak boleh menggugurkan sisanya
+        except requests.RequestException as exc:
+            # Satu sumber mati tidak boleh menggugurkan sisanya.
+            laporan.append(f"{nama}: gagal ({type(exc).__name__})")
+            continue
+        if response.status_code != 200:
+            laporan.append(f"{nama}: HTTP {response.status_code}")
+            continue
+        berhasil += 1
+        diurai = urai_rss(response.text, nama)
+        di_sini = sum(mulai <= b.waktu <= selesai for b in diurai)
+        laporan.append(f"{nama}: {len(diurai)} berita, {di_sini} di jendela")
+        semua += diurai
+    if not berhasil:
+        raise BeritaError("tidak ada sumber yang bisa diambil - " + "; ".join(laporan))
     di_jendela = [b for b in semua if mulai <= b.waktu <= selesai]
     di_jendela.sort(key=lambda b: b.waktu, reverse=True)
     return di_jendela

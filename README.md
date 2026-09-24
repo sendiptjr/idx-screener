@@ -515,8 +515,10 @@ digeser dengan `--news-dari` dan `--news-sampai`. Hari bursa sebelumnya, bukan
 kemarin: dijalankan Senin pagi jendelanya mundur sampai Jumat sore, supaya
 berita akhir pekan tidak hilang.
 
-Sumbernya RSS CNBC Indonesia (pasar dan investment). Kontan dan Bisnis.com
-membalas 403 untuk permintaan otomatis, jadi tidak dipakai.
+Sumbernya RSS pasar CNBC Indonesia (feed investment-nya membalas 404 sejak
+September 2026). Kontan dan Bisnis.com membalas 403 untuk permintaan otomatis,
+jadi tidak dipakai. Status tiap sumber tercetak di log; bila semua sumber
+gagal, `notify` keluar dengan kode 1 agar run-nya terlihat merah.
 
 ### Cara nama dicocokkan ke emiten
 
