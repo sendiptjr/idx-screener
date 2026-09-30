@@ -5,9 +5,12 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from idx_screener import news
 from idx_screener.news import (
     Berita,
+    BeritaError,
     Sebutan,
+    ambil_berita,
     cocokkan,
     format_berita,
     jendela_semalam,
@@ -78,6 +81,57 @@ def test_rss_diurai_beserta_zona_waktunya():
 
 
 # ---------------- penanda nama ----------------
+
+
+class _Balasan:
+    def __init__(self, status, text=""):
+        self.status_code, self.text = status, text
+
+
+MULAI = pd.Timestamp("2026-09-21 15:00", tz="Asia/Jakarta")
+SELESAI = pd.Timestamp("2026-09-22 08:00", tz="Asia/Jakarta")
+DUA_SUMBER = (("A", "https://a"), ("B", "https://b"))
+
+
+def test_status_tiap_sumber_dilaporkan(monkeypatch):
+    balasan = {"https://a": _Balasan(200, RSS), "https://b": _Balasan(404)}
+    monkeypatch.setattr(news.requests, "get", lambda url, **_: balasan[url])
+    laporan = []
+    hasil = ambil_berita(MULAI, SELESAI, sumber=DUA_SUMBER, laporan=laporan)
+    assert [b.judul for b in hasil] == ["KPK Geledah Kantor Summarecon di Bogor"]
+    assert laporan == ["A: 2 berita, 1 di jendela", "B: HTTP 404"]
+
+
+def test_berita_ganda_antarsumber_dibuang(monkeypatch):
+    monkeypatch.setattr(news.requests, "get", lambda url, **_: _Balasan(200, RSS))
+    hasil = ambil_berita(MULAI, SELESAI, sumber=DUA_SUMBER)
+    assert len(hasil) == 1
+
+
+def test_html_yang_di_escape_dibersihkan():
+    xml = """<item><title>Saham A &amp; B</title><pubDate>Mon, 21 Sep 2026 10:05:00 GMT</pubDate>
+<description>&lt;a href="https://x"&gt;Judul&lt;/a&gt;&amp;nbsp;&lt;font&gt;detik&lt;/font&gt;</description></item>"""
+    [b] = urai_rss(xml, "uji")
+    assert b.judul == "Saham A & B"
+    assert b.ringkasan == "Judul detik"
+    assert b.waktu == pd.Timestamp("2026-09-21 17:05", tz="Asia/Jakarta")
+
+
+def test_nama_media_dan_klaster_google_tidak_ikut_dicocokkan(monkeypatch, universe):
+    xml = """<item><title>Riset Makanan Cegah Penyakit Jantung - Medco News</title>
+<pubDate>Mon, 21 Sep 2026 10:05:00 GMT</pubDate>
+<description>&lt;a&gt;Saham BBRI Naik&lt;/a&gt; Kontan</description></item>"""
+    monkeypatch.setattr(news.requests, "get", lambda url, **_: _Balasan(200, xml))
+    [b] = ambil_berita(MULAI, SELESAI, sumber=(("G", "https://news.google.com/rss"),))
+    assert (b.judul, b.sumber, b.ringkasan) == ("Riset Makanan Cegah Penyakit Jantung", "Medco News", "")
+    assert cocokkan([b], universe) == []
+
+
+def test_semua_sumber_gagal_bukan_daftar_kosong(monkeypatch):
+    # Kosong karena diblokir harus bisa dibedakan dari malam yang sepi berita.
+    monkeypatch.setattr(news.requests, "get", lambda url, **_: _Balasan(403))
+    with pytest.raises(BeritaError, match="A: HTTP 403; B: HTTP 403"):
+        ambil_berita(MULAI, SELESAI, sumber=DUA_SUMBER)
 
 
 def test_kata_umum_tidak_jadi_penanda_tunggal():

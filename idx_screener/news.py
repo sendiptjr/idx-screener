@@ -13,6 +13,8 @@ irisannya dengan saringan yang memang terukur.
 from __future__ import annotations
 
 import email.utils
+import html
+import math
 import re
 from dataclasses import dataclass, field
 
@@ -22,10 +24,24 @@ import requests
 from .universe import Emiten
 
 # Hanya sumber yang benar-benar melayani permintaan otomatis. Kontan dan
-# Bisnis.com membalas 403, jadi tidak disertakan.
+# Bisnis.com membalas 403, jadi tidak disertakan. Feed investment CNBC
+# membalas 404 sejak September 2026.
+#
+# CNBC juga membalas 403 ke IP datacenter, termasuk runner GitHub Actions, jadi
+# Google News dipakai sebagai sumber kedua. Satu kueri dibatasi 100 item dan
+# diurutkan menurut relevansi, bukan waktu - karena itu beberapa kueri sempit
+# digabung alih-alih satu kueri lebar. Feed utama dan bisnis membawa berita
+# umum yang tidak menyebut emiten, bahan untuk `analisis.py`. {hari} diisi
+# dari panjang jendela, supaya Senin pagi tetap menjangkau Jumat sore.
+_GOOGLE = "https://news.google.com/rss{jalur}?{kueri}hl=id&gl=ID&ceid=ID:id"
 SUMBER_RSS = (
     ("CNBC Indonesia", "https://www.cnbcindonesia.com/market/rss"),
-    ("CNBC Investment", "https://www.cnbcindonesia.com/investment/rss"),
+    *(
+        (f"Google News '{q}'", _GOOGLE.format(jalur="/search", kueri=f"q={q}+when:{{hari}}d&"))
+        for q in ("saham", "emiten", "IHSG", "bursa+OR+tbk")
+    ),
+    ("Google News utama", _GOOGLE.format(jalur="", kueri="")),
+    ("Google News bisnis", _GOOGLE.format(jalur="/headlines/section/topic/BUSINESS", kueri="")),
 )
 
 ZONA = "Asia/Jakarta"
@@ -57,6 +73,10 @@ TERLALU_UMUM = {
     "pratama", "lestari", "manufaktur", "perkasa", "sarana", "solusi",
     "nasional", "pacific", "pasifik", "raya", "central", "capital",
 }
+
+
+class BeritaError(RuntimeError):
+    """Tidak satu pun sumber RSS bisa diambil."""
 
 
 @dataclass
@@ -111,7 +131,9 @@ def _isi_tag(tag: str, blok: str) -> str:
     m = re.search(rf"<{tag}[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</{tag}>", blok, re.S)
     if not m:
         return ""
-    teks = re.sub(r"<[^>]+>", " ", m.group(1))
+    # Google News menaruh HTML yang di-escape di <description>, bukan CDATA,
+    # dan entitas di dalamnya di-escape sekali lagi (&amp;nbsp;).
+    teks = html.unescape(re.sub(r"<[^>]+>", " ", html.unescape(m.group(1))))
     return re.sub(r"\s+", " ", teks).strip()
 
 
@@ -138,26 +160,66 @@ def urai_rss(xml: str, sumber: str) -> list[Berita]:
     return hasil
 
 
+def _rapikan_google(b: Berita) -> Berita:
+    """Judul Google News berakhiran " - Nama Media", dan <description>-nya
+    bukan ringkasan melainkan judul-judul lain dari klaster yang sama. Keduanya
+    menyeret pencocokan ke emiten yang tidak diberitakan - "VIVA.co.id" jadi
+    VIVA, judul tetangga di klaster jadi emiten lain. Nama media dipindah ke
+    `sumber`, ringkasannya dibuang."""
+    judul, pemisah, media = b.judul.rpartition(" - ")
+    if pemisah and judul:
+        b.judul, b.sumber = judul, media
+    b.ringkasan = ""
+    return b
+
+
 def ambil_berita(
     mulai: pd.Timestamp,
     selesai: pd.Timestamp,
     *,
     sumber=SUMBER_RSS,
     timeout: float = 20.0,
+    laporan: list[str] | None = None,
 ) -> list[Berita]:
-    """Berita dari semua sumber yang jatuh di dalam jendela, terbaru dulu."""
+    """Berita dari semua sumber yang jatuh di dalam jendela, terbaru dulu.
+
+    Status tiap sumber ditambahkan ke `laporan` bila diberikan. Bila tidak satu
+    pun sumber berhasil, BeritaError dilempar - daftar kosong karena semua
+    sumber mati tidak boleh terlihat sama dengan malam yang sepi berita.
+    """
+    laporan = laporan if laporan is not None else []
+    hari = max(1, math.ceil((pd.Timestamp.now(tz=mulai.tz) - mulai) / pd.Timedelta(days=1)))
     semua: list[Berita] = []
+    berhasil = 0
     for nama, url in sumber:
         try:
             response = requests.get(
-                url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0"}
+                url.replace("{hari}", str(hari)), timeout=timeout, headers={"User-Agent": "Mozilla/5.0"}
             )
-            if response.status_code != 200:
-                continue
-            semua += urai_rss(response.text, nama)
-        except requests.RequestException:
-            continue      # satu sumber mati tidak boleh menggugurkan sisanya
-    di_jendela = [b for b in semua if mulai <= b.waktu <= selesai]
+        except requests.RequestException as exc:
+            # Satu sumber mati tidak boleh menggugurkan sisanya.
+            laporan.append(f"{nama}: gagal ({type(exc).__name__})")
+            continue
+        if response.status_code != 200:
+            laporan.append(f"{nama}: HTTP {response.status_code}")
+            continue
+        berhasil += 1
+        diurai = urai_rss(response.text, nama)
+        if "news.google.com" in url:
+            diurai = [_rapikan_google(b) for b in diurai]
+        di_sini = sum(mulai <= b.waktu <= selesai for b in diurai)
+        laporan.append(f"{nama}: {len(diurai)} berita, {di_sini} di jendela")
+        semua += diurai
+    if not berhasil:
+        raise BeritaError("tidak ada sumber yang bisa diambil - " + "; ".join(laporan))
+    # Satu berita bisa muncul di beberapa kueri; yang pertama dipertahankan.
+    terlihat: set[str] = set()
+    di_jendela = []
+    for b in semua:
+        kunci = _normal(b.judul)
+        if mulai <= b.waktu <= selesai and kunci not in terlihat:
+            terlihat.add(kunci)
+            di_jendela.append(b)
     di_jendela.sort(key=lambda b: b.waktu, reverse=True)
     return di_jendela
 

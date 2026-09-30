@@ -13,6 +13,7 @@ from plotly.subplots import make_subplots
 from idx_screener import indicators as ind
 from idx_screener.config import PRICE_TTL_HOURS
 from idx_screener.metrics import FIELD_DOCS, NUMERIC_FIELDS
+from idx_screener.news import ambil_berita, cocokkan, jendela_semalam
 from idx_screener.presets import load_presets
 from idx_screener.report import fmt
 from idx_screener.providers.yahoo import YahooProvider
@@ -45,6 +46,30 @@ def get_prices(ticker: str) -> pd.DataFrame:
 
     provider = YahooProvider()
     return provider.prices([Emiten(ticker=ticker)]).get(ticker, pd.DataFrame())
+
+
+# Jendela berita bergeser tiap menit sebelum pukul 08.00, jadi yang dijadikan
+# kunci cache adalah jam-jamnya, bukan stempel waktunya; TTL menahan agar
+# berita baru tetap masuk.
+@st.cache_data(show_spinner=False, ttl=1800)
+def get_berita(jam_mulai: int, jam_selesai: int) -> tuple[pd.DataFrame, list[str], str]:
+    """Emiten yang disebut berita semalam: (tabel sebutan, laporan sumber, rentang)."""
+    mulai, selesai = jendela_semalam(jam_mulai=jam_mulai, jam_selesai=jam_selesai)
+    laporan: list[str] = []
+    berita = ambil_berita(mulai, selesai, laporan=laporan)
+    sebutan = cocokkan(berita, UNIVERSE)
+    tabel = pd.DataFrame([
+        {
+            "ticker": s.ticker,
+            "name": s.nama,
+            "jumlah_berita": len(s.berita),
+            "judul": " · ".join(b.judul for b in s.berita[:3]),
+            "tautan": s.berita[0].tautan if s.berita else "",
+        }
+        for s in sebutan
+    ], columns=["ticker", "name", "jumlah_berita", "judul", "tautan"])
+    rentang = f"{mulai:%d %b %H.%M} - {selesai:%d %b %H.%M} WIB · {len(berita)} berita"
+    return tabel, laporan, rentang
 
 
 def bubble_sizes(market_cap: pd.Series, low: int = 10, high: int = 44) -> pd.Series:
@@ -107,6 +132,25 @@ max_deep = st.sidebar.slider(
          "Batas ini menahan berapa kandidat yang ditarik setelah saringan murah.",
 )
 
+st.sidebar.divider()
+pakai_berita = st.sidebar.checkbox(
+    "Hanya emiten yang disebut berita semalam", key="pakai_berita",
+    help="Saringan di atas hanya diterapkan ke emiten yang muncul di berita pasar "
+         "sejak sore hari bursa sebelumnya. Sebutan berita tidak punya pengukuran "
+         "di belakangnya - perlakukan sebagai informasi, bukan sinyal.",
+)
+jam_a, jam_b = st.sidebar.columns(2)
+jam_dari = jam_a.number_input(
+    "Berita dari jam", 0, 23, 15, key="jam_dari", disabled=not pakai_berita,
+    help="Jam WIB pada hari bursa sebelumnya.",
+)
+jam_sampai = jam_b.number_input(
+    "sampai jam", 0, 23, 8, key="jam_sampai", disabled=not pakai_berita,
+    help="Jam WIB hari ini.",
+)
+if pakai_berita and st.sidebar.button("Ambil ulang berita", width="stretch"):
+    get_berita.clear()
+
 col_a, col_b = st.sidebar.columns(2)
 offline = col_a.checkbox("Offline", value=False, help="Hanya baca cache lokal.")
 if col_b.button("Muat ulang data", width="stretch"):
@@ -124,6 +168,21 @@ with st.spinner("Mengambil data harga dan fundamental..."):
 if snapshot.empty:
     st.error("Tidak ada data. Jalankan `idxscreen update` lebih dulu atau matikan mode offline.")
     st.stop()
+
+berita = None
+if pakai_berita:
+    try:
+        with st.spinner("Mengambil berita semalam..."):
+            berita, laporan_berita, rentang_berita = get_berita(int(jam_dari), int(jam_sampai))
+    except Exception as exc:
+        st.error(f"Gagal mengambil berita: {exc}")
+        st.stop()
+    # Saringan tetap dijalankan lewat Screener; yang dipersempit hanya
+    # emiten yang diperiksanya.
+    snapshot = snapshot[snapshot.index.isin(berita["ticker"])]
+    if snapshot.empty:
+        st.warning(f"Tidak ada emiten yang disebut berita ({rentang_berita}).")
+        st.stop()
 
 expressions = [line.strip() for line in filter_text.splitlines() if line.strip()]
 if picked_sectors:
@@ -145,6 +204,12 @@ except (RuleError, KeyError) as exc:
     st.stop()
 
 matched = result.matched
+if berita is not None and not matched.empty:
+    per_ticker = berita.set_index("ticker")
+    matched = matched.assign(
+        jumlah_berita=matched["ticker"].map(per_ticker["jumlah_berita"]),
+        judul=matched["ticker"].map(per_ticker["judul"]),
+    )
 
 # ----------------------------- header -----------------------------
 
@@ -153,6 +218,12 @@ if preset:
     st.caption(preset.description)
     if preset.note:
         st.warning(preset.note)
+if berita is not None:
+    st.info(
+        f"Dibatasi ke {len(berita)} emiten yang disebut berita semalam ({rentang_berita}). "
+        "Sebutan berita tidak punya pengukuran di belakangnya dan pencocokannya bisa keliru "
+        "(misalnya \"Matahari\" di berita astronomi) - periksa judulnya."
+    )
 
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Emiten dipindai", result.total_scanned)
@@ -171,6 +242,8 @@ else:
         display_columns = ["ticker", "name", "sector", "close", "change_pct", "per", "pbv", "roe", "avg_value_20"]
     if sort_by not in display_columns:
         display_columns.append(sort_by)
+    if berita is not None:
+        display_columns += ["jumlah_berita", "judul"]
 
     st.dataframe(
         matched[display_columns],
@@ -183,6 +256,8 @@ else:
             "change_pct": st.column_config.NumberColumn("% Hari", format="%.2f%%"),
             "market_cap": st.column_config.NumberColumn("Kap. Pasar", format="compact"),
             "avg_value_20": st.column_config.NumberColumn("Nilai/hari", format="compact"),
+            "jumlah_berita": st.column_config.NumberColumn("Berita", format="%d"),
+            "judul": st.column_config.TextColumn("Judul berita", width="large"),
         },
     )
     st.download_button(
@@ -205,6 +280,24 @@ with st.expander("Corong filter - berapa emiten gugur di tiap syarat"):
     )
     if errors:
         st.caption(f"{len(errors)} emiten dilewati: " + ", ".join(list(errors)[:20]))
+
+if berita is not None:
+    with st.expander(f"Semua emiten yang disebut berita semalam ({len(berita)})"):
+        lolos = set(matched["ticker"]) if not matched.empty else set()
+        semua = berita.assign(lolos=berita["ticker"].isin(lolos))
+        st.dataframe(
+            semua[["ticker", "name", "lolos", "jumlah_berita", "judul", "tautan"]],
+            width="stretch", hide_index=True,
+            column_config={
+                "ticker": st.column_config.TextColumn("Kode"),
+                "name": st.column_config.TextColumn("Nama", width="medium"),
+                "lolos": st.column_config.CheckboxColumn("Lolos filter"),
+                "jumlah_berita": st.column_config.NumberColumn("Berita", format="%d"),
+                "judul": st.column_config.TextColumn("Judul berita", width="large"),
+                "tautan": st.column_config.LinkColumn("Tautan", display_text="buka"),
+            },
+        )
+        st.caption("Sumber: " + " · ".join(laporan_berita))
 
 # ----------------------------- peta sebaran -----------------------------
 
